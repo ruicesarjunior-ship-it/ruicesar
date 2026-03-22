@@ -287,6 +287,7 @@ def _build_editor_analysis(
         "keep_hypothesis_markers": keep_markers,
         "extra_named_replacements": extra_replacements,
         "_zones": zones,
+        "conteudo": conteudo,
     }
 
 

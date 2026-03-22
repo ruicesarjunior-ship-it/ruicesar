@@ -1,51 +1,52 @@
 """
 Editor de templates .docx para promoções de arquivamento do MPBA.
 
-Operações suportadas:
-  - Substituir texto vermelho (w:color FF0000) pelo conteúdo do caso
-  - Remover blocos de hipóteses não aplicáveis (marcadores [HIPÓTESE...])
-  - Remover instruções internas entre colchetes
-  - Substituir variáveis nomeadas #{variavel}
-  - Tratar blocos condicionais (ressarcimento, reforço lapso)
+Estratégia em duas camadas:
+  1. Variáveis nomeadas #{var}: substituição direta no XML do ZIP (string replace),
+     pois o texto pode estar fragmentado em vários <w:r> no Word.
+  2. Zonas vermelhas e remoção de blocos: python-docx, que preserva corretamente
+     cabeçalhos, rodapés, imagens e toda a formatação do template.
 
-REGRA ABSOLUTA: só edita word/document.xml — nunca toca em outros arquivos.
+REGRA ABSOLUTA: nunca toca em header1.xml, footer1.xml, media/, _rels/, etc.
 """
 from __future__ import annotations
 
-import copy
 import re
 import shutil
-import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
+from docx import Document
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from lxml import etree
 
-from scripts.office.unpack import unpack
-from scripts.office.pack import pack
+# ---------------------------------------------------------------------------
+# Constantes
+# ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Namespace Word
-# ---------------------------------------------------------------------------
-W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
+W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
+BLOCK_MARKER_RE = re.compile(
+    r"\[(HIPÓTESE|HIPOTESE|OU\s*[–\-]|OMITIR)", re.IGNORECASE
+)
+
+INSTRUCTION_ONLY_RE = re.compile(
+    r"^\s*\[[^\]]*\]\s*$", re.IGNORECASE
+)
+
+# ---------------------------------------------------------------------------
+# Extração de zonas vermelhas (lxml — somente leitura)
+# ---------------------------------------------------------------------------
 
 def _w(tag: str) -> str:
     return f"{{{W}}}{tag}"
 
 
-# ---------------------------------------------------------------------------
-# Helpers de leitura
-# ---------------------------------------------------------------------------
-
-def _get_run_text(run: etree._Element) -> str:
-    t = run.find(_w("t"))
-    return (t.text or "") if t is not None else ""
-
-
-def _is_red_run(run: etree._Element) -> bool:
-    rpr = run.find(_w("rPr"))
+def _is_red_elem(run_elem: etree._Element) -> bool:
+    rpr = run_elem.find(_w("rPr"))
     if rpr is None:
         return False
     color = rpr.find(_w("color"))
@@ -55,50 +56,11 @@ def _is_red_run(run: etree._Element) -> bool:
     return val.upper() == "FF0000"
 
 
-def _get_para_full_text(para: etree._Element) -> str:
-    """Texto completo do parágrafo (todos os runs)."""
-    parts = []
-    for run in para.iter(_w("r")):
-        t = run.find(_w("t"))
-        if t is not None and t.text:
-            parts.append(t.text)
-    return "".join(parts)
-
-
-def _get_para_red_text(para: etree._Element) -> str:
-    """Apenas o texto dos runs vermelhos do parágrafo."""
-    parts = []
-    for run in para.iter(_w("r")):
-        if _is_red_run(run):
-            t = run.find(_w("t"))
-            if t is not None and t.text:
-                parts.append(t.text)
-    return "".join(parts)
-
-
-def _para_has_red(para: etree._Element) -> bool:
-    for run in para.iter(_w("r")):
-        if _is_red_run(run):
-            t = run.find(_w("t"))
-            if t is not None and t.text and t.text.strip():
-                return True
-    return False
-
-
-# ---------------------------------------------------------------------------
-# Extração de zonas vermelhas
-# ---------------------------------------------------------------------------
-
 def extract_red_zones(doc_xml_path: str | Path) -> list[dict]:
     """
-    Retorna lista de zonas com texto vermelho no template.
-    Cada zona:
-        zone_id       : int  (índice sequencial)
-        para_index    : int  (índice do parágrafo no body)
-        red_text      : str  (texto vermelho concatenado)
-        context_before: str  (texto preto antes do vermelho, mesmo parágrafo)
-        context_after : str  (texto preto depois do vermelho, mesmo parágrafo)
-        is_full_para  : bool (parágrafo inteiramente vermelho)
+    Extrai zonas de texto vermelho do document.xml.
+    Retorna lista de dicts com zone_id, para_index, red_text, context_before,
+    context_after, is_full_para.
     """
     tree = etree.parse(str(doc_xml_path))
     root = tree.getroot()
@@ -108,46 +70,38 @@ def extract_red_zones(doc_xml_path: str | Path) -> list[dict]:
 
     zones: list[dict] = []
     zone_id = 0
-
     para_children = [c for c in body if c.tag == _w("p")]
 
     for para_idx, para in enumerate(para_children):
-        before_parts: list[str] = []
-        red_parts: list[str] = []
-        after_parts: list[str] = []
+        before: list[str] = []
+        red: list[str] = []
+        after: list[str] = []
         seen_red = False
 
-        for run in para:  # apenas filhos diretos (não itera hyperlinks profundo)
-            if run.tag == _w("r"):
-                text = _get_run_text(run)
-                if _is_red_run(run):
-                    red_parts.append(text)
-                    seen_red = True
-                elif not seen_red:
-                    before_parts.append(text)
-                else:
-                    after_parts.append(text)
-            elif run.tag == _w("hyperlink"):
-                # trata runs dentro de hyperlinks
-                for inner_run in run:
-                    if inner_run.tag != _w("r"):
-                        continue
-                    text = _get_run_text(inner_run)
-                    if _is_red_run(inner_run):
-                        red_parts.append(text)
+        def _collect(parent: etree._Element) -> None:
+            nonlocal seen_red
+            for child in parent:
+                if child.tag == _w("r"):
+                    t = child.find(_w("t"))
+                    text = (t.text or "") if t is not None else ""
+                    if _is_red_elem(child):
+                        red.append(text)
                         seen_red = True
                     elif not seen_red:
-                        before_parts.append(text)
+                        before.append(text)
                     else:
-                        after_parts.append(text)
+                        after.append(text)
+                elif child.tag == _w("hyperlink"):
+                    _collect(child)
 
-        red_text = "".join(red_parts).strip()
+        _collect(para)
+
+        red_text = "".join(red).strip()
         if not red_text:
             continue
 
-        ctx_before = "".join(before_parts).strip()
-        ctx_after = "".join(after_parts).strip()
-        is_full = not bool(ctx_before) and not bool(ctx_after)
+        ctx_before = "".join(before).strip()
+        ctx_after = "".join(after).strip()
 
         zones.append(
             {
@@ -156,7 +110,7 @@ def extract_red_zones(doc_xml_path: str | Path) -> list[dict]:
                 "red_text": red_text,
                 "context_before": ctx_before,
                 "context_after": ctx_after,
-                "is_full_para": is_full,
+                "is_full_para": not bool(ctx_before) and not bool(ctx_after),
             }
         )
         zone_id += 1
@@ -165,287 +119,238 @@ def extract_red_zones(doc_xml_path: str | Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Aplicação de substituições
+# Substituição de variáveis nomeadas — diretamente no ZIP (string replace)
 # ---------------------------------------------------------------------------
 
-def _replace_red_in_para(para: etree._Element, new_text: str) -> None:
+def _escape_xml(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+    )
+
+
+def apply_named_vars_to_zip(
+    docx_path: str | Path,
+    variables: dict[str, str],
+) -> None:
     """
-    Substitui todo o texto vermelho do parágrafo por new_text.
-    Preserva o primeiro run vermelho (sem a cor) e remove os demais.
+    Substitui #{variavel} e literais extras em TODOS os XML do ZIP.
+    Opera diretamente nos bytes — não usa lxml — preservando namespaces intactos.
+    Isso cobre cabeçalhos, rodapés e qualquer outra parte do documento.
     """
-    red_runs: list[tuple[etree._Element, etree._Element]] = []  # (parent, run)
+    docx_path = Path(docx_path)
+    tmp_path = docx_path.with_suffix(".tmp.docx")
 
-    def collect(parent: etree._Element) -> None:
-        for child in list(parent):
-            if child.tag == _w("r") and _is_red_run(child):
-                red_runs.append((parent, child))
-            elif child.tag == _w("hyperlink"):
-                collect(child)
+    with zipfile.ZipFile(docx_path, "r") as zin, \
+         zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout:
 
-    collect(para)
+        for item in zin.infolist():
+            data = zin.read(item.filename)
 
+            if item.filename.endswith(".xml") or item.filename.endswith(".rels"):
+                try:
+                    text = data.decode("utf-8")
+                    for var_name, value in variables.items():
+                        escaped = _escape_xml(value)
+                        text = text.replace(f"#{{{var_name}}}", escaped)
+                        text = text.replace(f"#{var_name}", escaped)
+                    data = text.encode("utf-8")
+                except UnicodeDecodeError:
+                    pass  # arquivo binário, não toca
+
+            zout.writestr(item, data)
+
+    shutil.move(str(tmp_path), str(docx_path))
+
+
+# ---------------------------------------------------------------------------
+# Manipulação via python-docx
+# ---------------------------------------------------------------------------
+
+def _is_red_run(run) -> bool:  # run = python-docx Run
+    rpr = run._element.find(qn("w:rPr"))
+    if rpr is None:
+        return False
+    color = rpr.find(qn("w:color"))
+    if color is None:
+        return False
+    val = color.get(qn("w:val"), "")
+    return val.upper() == "FF0000"
+
+
+def _make_run_black(run) -> None:
+    rpr = run._element.find(qn("w:rPr"))
+    if rpr is not None:
+        color = rpr.find(qn("w:color"))
+        if color is not None and color.get(qn("w:val"), "").upper() == "FF0000":
+            rpr.remove(color)
+
+
+def _set_run_text(run, text: str) -> None:
+    t_elem = run._element.find(qn("w:t"))
+    if t_elem is None:
+        t_elem = OxmlElement("w:t")
+        run._element.append(t_elem)
+    t_elem.text = text
+    if text and (text.startswith(" ") or text.endswith(" ")):
+        t_elem.set(XML_SPACE, "preserve")
+    else:
+        t_elem.attrib.pop(XML_SPACE, None)
+
+
+def _get_all_paragraphs(doc: Document) -> list:
+    """Retorna todos os parágrafos do corpo (não inclui header/footer)."""
+    paras = list(doc.paragraphs)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                paras.extend(cell.paragraphs)
+    return paras
+
+
+def _get_para_text(para) -> str:
+    return "".join(r.text or "" for r in para.runs)
+
+
+def _para_is_block_marker(text: str) -> bool:
+    return bool(BLOCK_MARKER_RE.search(text))
+
+
+def _para_is_instruction_only(text: str) -> bool:
+    return bool(INSTRUCTION_ONLY_RE.match(text.strip())) and text.strip() != ""
+
+
+def _process_red_runs(para, red_text_map: dict[str, str]) -> None:
+    """Substitui texto vermelho no parágrafo pelo conteúdo do caso."""
+    red_runs = [r for r in para.runs if _is_red_run(r)]
     if not red_runs:
         return
 
-    # Primeiro run vermelho → recebe o novo texto
-    first_parent, first_run = red_runs[0]
-    t = first_run.find(_w("t"))
-    if t is None:
-        t = etree.SubElement(first_run, _w("t"))
-    t.text = new_text
-    if new_text and (new_text.startswith(" ") or new_text.endswith(" ")):
-        t.set(XML_SPACE, "preserve")
-    else:
-        t.attrib.pop(XML_SPACE, None)
+    red_text = "".join(r.text or "" for r in red_runs).strip()
+    replacement = red_text_map.get(red_text)
 
-    # Remove a cor vermelha do rPr
-    rpr = first_run.find(_w("rPr"))
-    if rpr is not None:
-        color = rpr.find(_w("color"))
-        if color is not None:
-            rpr.remove(color)
-
-    # Remove os demais runs vermelhos
-    for parent, run in red_runs[1:]:
-        try:
-            parent.remove(run)
-        except ValueError:
-            pass
-
-
-def _insert_paragraphs_after(
-    body: etree._Element,
-    ref_para: etree._Element,
-    texts: list[str],
-) -> None:
-    """
-    Insere novos parágrafos após ref_para, copiando seu estilo (pPr).
-    Cada texto em texts vira um parágrafo novo.
-    """
-    insert_idx = list(body).index(ref_para) + 1
-    for i, text in enumerate(texts):
-        new_para = etree.Element(_w("p"))
-        # Copia pPr do parágrafo original
-        orig_ppr = ref_para.find(_w("pPr"))
-        if orig_ppr is not None:
-            new_para.append(copy.deepcopy(orig_ppr))
-        # Copia rPr do primeiro run vermelho original (sem a cor)
-        orig_rpr = None
-        for run in ref_para.iter(_w("r")):
-            if _is_red_run(run):
-                orig_rpr = run.find(_w("rPr"))
+    if replacement is None:
+        # Tenta correspondência parcial (para textos levemente diferentes)
+        for key, val in red_text_map.items():
+            if key and red_text and (key in red_text or red_text in key):
+                replacement = val
                 break
-        new_run = etree.SubElement(new_para, _w("r"))
-        if orig_rpr is not None:
-            new_rpr = copy.deepcopy(orig_rpr)
-            color = new_rpr.find(_w("color"))
-            if color is not None:
-                new_rpr.remove(color)
-            new_run.append(new_rpr)
-        new_t = etree.SubElement(new_run, _w("t"))
-        new_t.text = text
-        if text and (text.startswith(" ") or text.endswith(" ")):
-            new_t.set(XML_SPACE, "preserve")
-        body.insert(insert_idx + i, new_para)
 
-
-def apply_zone_replacements(
-    doc_xml_path: str | Path,
-    zones: list[dict],
-    replacements: dict[int, str],
-    output_path: str | Path,
-) -> None:
-    """
-    Aplica replacements nas zonas.
-    replacements: {zone_id: novo_texto}
-    Se novo_texto contiver \\n\\n, insere parágrafos adicionais após o original.
-    """
-    tree = etree.parse(str(doc_xml_path))
-    root = tree.getroot()
-    body = root.find(_w("body"))
-    para_children = [c for c in body if c.tag == _w("p")]
-
-    zone_by_id = {z["zone_id"]: z for z in zones}
-
-    for zone_id, new_text in replacements.items():
-        zone = zone_by_id.get(zone_id)
-        if zone is None:
-            continue
-        para_idx = zone["para_index"]
-        if para_idx >= len(para_children):
-            continue
-        para = para_children[para_idx]
-
-        paragraphs = [p.strip() for p in new_text.split("\n\n") if p.strip()]
-        if not paragraphs:
-            paragraphs = [new_text]
-
-        _replace_red_in_para(para, paragraphs[0])
-
-        if len(paragraphs) > 1:
-            _insert_paragraphs_after(body, para, paragraphs[1:])
-
-    _save_xml(tree, output_path)
-
-
-# ---------------------------------------------------------------------------
-# Substituição de variáveis nomeadas #{variavel}
-# ---------------------------------------------------------------------------
-
-def replace_named_vars(
-    doc_xml_path: str | Path,
-    variables: dict[str, str],
-    output_path: str | Path,
-) -> None:
-    """
-    Substitui #{variavel} e também nomes literais como MARCO AURÉLIO RUBICK DA SILVA.
-    Atua no texto XML como string (mais robusto para placeholders que
-    podem estar fragmentados em múltiplos runs).
-    """
-    xml_bytes = Path(doc_xml_path).read_bytes()
-    xml_str = xml_bytes.decode("utf-8")
-
-    for var_name, value in variables.items():
-        # Placeholder #{variavel}
-        placeholder = f"#{{{var_name}}}"
-        xml_str = xml_str.replace(placeholder, value)
-        # Também tenta sem chaves: #variavel
-        xml_str = xml_str.replace(f"#{var_name}", value)
-
-    Path(output_path).write_bytes(xml_str.encode("utf-8"))
-
-
-# ---------------------------------------------------------------------------
-# Remoção de blocos de hipóteses
-# ---------------------------------------------------------------------------
-
-BLOCK_MARKER_PATTERNS = [
-    r"\[HIPÓTESE",
-    r"\[HIPOTESE",
-    r"\[OU\s*[–-]",
-    r"\[OU –",
-    r"\[OU -",
-]
-
-
-def _para_is_block_marker(para: etree._Element) -> bool:
-    text = _get_para_full_text(para)
-    for pattern in BLOCK_MARKER_PATTERNS:
-        if re.search(pattern, text, re.IGNORECASE):
-            return True
-    return False
-
-
-def _para_marker_text(para: etree._Element) -> str:
-    return _get_para_full_text(para)
-
-
-def remove_hypothesis_blocks(
-    doc_xml_path: str | Path,
-    keep_markers: list[str],
-    output_path: str | Path,
-) -> None:
-    """
-    Remove blocos de hipóteses NÃO listados em keep_markers.
-    keep_markers: lista de fragmentos de texto que identificam hipóteses a MANTER.
-        Ex: ["H4", "AUSÊNCIA DE ELEMENTOS", "notificação prévia"]
-
-    Algoritmo:
-        1. Encontra todos os parágrafos marcadores (contêm [HIPÓTESE...] ou [OU –...])
-        2. Agrupa parágrafos entre marcadores em blocos
-        3. Remove os blocos cujo marcador NÃO está em keep_markers
-    """
-    tree = etree.parse(str(doc_xml_path))
-    root = tree.getroot()
-    body = root.find(_w("body"))
-    children = list(body)
-
-    # Encontra índices de marcadores
-    marker_indices: list[int] = []
-    for i, child in enumerate(children):
-        if child.tag == _w("p") and _para_is_block_marker(child):
-            marker_indices.append(i)
-
-    if not marker_indices:
-        _save_xml(tree, output_path)
+    if replacement is None:
+        # Sem correspondência: apenas torna preto
+        for run in red_runs:
+            _make_run_black(run)
         return
 
-    # Constrói blocos: (start_idx, end_idx_exclusive, marker_text)
-    blocks: list[tuple[int, int, str]] = []
-    for j, start in enumerate(marker_indices):
-        end = marker_indices[j + 1] if j + 1 < len(marker_indices) else len(children)
-        marker_text = _para_marker_text(children[start])
-        blocks.append((start, end, marker_text))
+    # Divide replacement em parágrafos (\\n\\n)
+    paragraphs = [p.strip() for p in replacement.split("\n\n") if p.strip()]
+    if not paragraphs:
+        paragraphs = [replacement]
 
-    # Determina quais remover
-    to_remove: set[int] = set()
-    for start, end, marker_text in blocks:
-        should_keep = any(
-            k.lower() in marker_text.lower() for k in keep_markers
-        )
-        if not should_keep:
-            for idx in range(start, end):
-                to_remove.add(idx)
+    # Substitui primeiro run vermelho com o primeiro parágrafo
+    _set_run_text(red_runs[0], paragraphs[0])
+    _make_run_black(red_runs[0])
 
-    # Remove (de trás para frente para não invalidar índices)
-    for idx in sorted(to_remove, reverse=True):
-        try:
-            body.remove(children[idx])
-        except ValueError:
-            pass
+    # Remove os demais runs vermelhos
+    for run in red_runs[1:]:
+        run._element.getparent().remove(run._element)
 
-    _save_xml(tree, output_path)
+    # Insere parágrafos adicionais após este
+    if len(paragraphs) > 1:
+        parent = para._element.getparent()
+        insert_idx = list(parent).index(para._element) + 1
+        for i, extra_text in enumerate(paragraphs[1:]):
+            from copy import deepcopy
+            new_para_elem = deepcopy(para._element)
+            # Limpa runs do novo parágrafo e adiciona o texto
+            for r in new_para_elem.findall(f".//{qn('w:r')}"):
+                new_para_elem.remove(r) if r.getparent() is new_para_elem else None
+            # Cria run simples com o texto extra
+            new_run = OxmlElement("w:r")
+            # Copia rPr do run original (sem a cor)
+            orig_rpr = red_runs[0]._element.find(qn("w:rPr"))
+            if orig_rpr is not None:
+                from copy import deepcopy as dc
+                new_rpr = dc(orig_rpr)
+                c = new_rpr.find(qn("w:color"))
+                if c is not None:
+                    new_rpr.remove(c)
+                new_run.append(new_rpr)
+            new_t = OxmlElement("w:t")
+            new_t.text = extra_text
+            new_run.append(new_t)
+            new_para_elem.append(new_run)
+            parent.insert(insert_idx + i, new_para_elem)
 
 
-# ---------------------------------------------------------------------------
-# Remoção de instruções internas entre colchetes
-# ---------------------------------------------------------------------------
+def _remove_paragraphs(paras_to_remove: list) -> None:
+    for elem in paras_to_remove:
+        parent = elem.getparent()
+        if parent is not None:
+            try:
+                parent.remove(elem)
+            except ValueError:
+                pass
 
-INSTRUCTION_BRACKET_PATTERN = re.compile(
-    r"\[(?:Objeto do Procedimento|TRABALHAR BEM|HIPÓTESE|HIPOTESE|OU\s*[–\-])[^\]]*\]",
-    re.IGNORECASE,
-)
 
-
-def remove_instruction_brackets(
-    doc_xml_path: str | Path,
-    output_path: str | Path,
+def process_document_with_docx(
+    docx_path: str | Path,
+    red_text_map: dict[str, str],
+    keep_hypothesis_markers: list[str],
 ) -> None:
     """
-    Remove parágrafos que contenham APENAS instruções internas entre colchetes
-    (ex: [Objeto do Procedimento. Consta da Portaria]).
-    Se o parágrafo tiver texto além da instrução, apenas remove o texto da instrução.
+    Abre o .docx com python-docx, processa parágrafos e salva no mesmo path.
+    Preserva cabeçalho, rodapé, brasão e toda a estrutura do template.
     """
-    tree = etree.parse(str(doc_xml_path))
-    root = tree.getroot()
-    body = root.find(_w("body"))
-    children = list(body)
+    doc = Document(str(docx_path))
+    paras = _get_all_paragraphs(doc)
 
-    to_remove: list[etree._Element] = []
+    # Identifica blocos de hipóteses (parágrafos marcadores e seus blocos)
+    # Estratégia: agrupa parágrafos por bloco de hipótese
+    marker_indices: list[int] = []
+    for i, para in enumerate(paras):
+        text = _get_para_text(para)
+        if _para_is_block_marker(text):
+            marker_indices.append(i)
 
-    for para in children:
-        if para.tag != _w("p"):
+    # Determina quais parágrafos remover por hipótese
+    to_remove_indices: set[int] = set()
+    if marker_indices:
+        for j, start in enumerate(marker_indices):
+            end = marker_indices[j + 1] if j + 1 < len(marker_indices) else len(paras)
+            marker_text = _get_para_text(paras[start])
+            should_keep = bool(keep_hypothesis_markers) and any(
+                k.lower() in marker_text.lower() for k in keep_hypothesis_markers
+            )
+            if not should_keep:
+                for idx in range(start, end):
+                    to_remove_indices.add(idx)
+
+    # Processa parágrafos
+    paras_to_remove: list = []
+    for i, para in enumerate(paras):
+        if i in to_remove_indices:
+            paras_to_remove.append(para._element)
             continue
-        full_text = _get_para_full_text(para)
-        if not full_text.strip():
+
+        text = _get_para_text(para).strip()
+
+        # Remove instruções internas entre colchetes
+        if _para_is_instruction_only(text):
+            paras_to_remove.append(para._element)
             continue
 
-        stripped = INSTRUCTION_BRACKET_PATTERN.sub("", full_text).strip()
-        if not stripped:
-            # Parágrafo inteiramente instrução → remove
-            to_remove.append(para)
+        # Substitui zonas vermelhas
+        _process_red_runs(para, red_text_map)
 
-    for para in to_remove:
-        try:
-            body.remove(para)
-        except ValueError:
-            pass
-
-    _save_xml(tree, output_path)
+    _remove_paragraphs(paras_to_remove)
+    doc.save(str(docx_path))
 
 
 # ---------------------------------------------------------------------------
-# Pipeline completo de edição do template
+# Pipeline completo
 # ---------------------------------------------------------------------------
 
 def apply_analysis_to_template(
@@ -454,65 +359,66 @@ def apply_analysis_to_template(
     analysis: dict[str, Any],
 ) -> Path:
     """
-    Aplica a análise do Claude ao template e gera o documento final.
+    Gera o documento final a partir do template.
 
     analysis deve conter:
-        zone_replacements : dict[int, str]   — substituições por zone_id
-        named_vars        : dict[str, str]   — variáveis #{nome}
-        keep_hypothesis_markers : list[str]  — marcadores de hipóteses a manter
-        extra_named_replacements: dict[str, str]  — substituições literais extras
+        zone_replacements          : dict[int, str]
+        named_vars                 : dict[str, str]
+        extra_named_replacements   : dict[str, str]
+        keep_hypothesis_markers    : list[str]
+        _zones                     : list[dict]
     """
     template_docx = Path(template_docx)
     output_docx = Path(output_docx)
+    output_docx.parent.mkdir(parents=True, exist_ok=True)
 
-    # Trabalha em diretório temporário
-    with tempfile.TemporaryDirectory(prefix="mpba_docx_") as tmp:
-        tmp = Path(tmp)
-        unpacked = tmp / "unpacked"
-        unpack(template_docx, unpacked)
+    # Copia o template para o destino
+    shutil.copy(template_docx, output_docx)
 
-        doc_xml = unpacked / "word" / "document.xml"
-        work_xml = unpacked / "word" / "document_work.xml"
+    # Passo 1 — substitui variáveis nomeadas diretamente no ZIP
+    named_vars = {
+        **(analysis.get("named_vars") or {}),
+        **(analysis.get("extra_named_replacements") or {}),
+    }
+    if named_vars:
+        apply_named_vars_to_zip(output_docx, named_vars)
 
-        # Passo 1 — substituições de variáveis nomeadas (string replace)
-        named_vars = analysis.get("named_vars", {})
-        extra = analysis.get("extra_named_replacements", {})
-        all_vars = {**named_vars, **extra}
-        if all_vars:
-            replace_named_vars(doc_xml, all_vars, work_xml)
-            shutil.copy(work_xml, doc_xml)
+    # Passo 2 — monta mapa de texto vermelho → substituição
+    zones = analysis.get("_zones") or []
+    zone_replacements = analysis.get("zone_replacements") or {}
+    red_text_map: dict[str, str] = {}
+    for zone in zones:
+        zid = zone["zone_id"]
+        if zid in zone_replacements:
+            red_text_map[zone["red_text"]] = zone_replacements[zid]
 
-        # Passo 2 — remove blocos de hipóteses não aplicáveis
-        keep_markers = analysis.get("keep_hypothesis_markers", [])
-        if keep_markers is not None:  # None = não mexe nos blocos
-            remove_hypothesis_blocks(doc_xml, keep_markers, work_xml)
-            shutil.copy(work_xml, doc_xml)
+    # Também inclui conteúdo direto da análise como fallback
+    conteudo = analysis.get("conteudo") or {}
+    content_fields = [
+        "paragrafo_objeto", "paragrafo_narrativa", "paragrafo_transicao",
+        "paragrafo_aplicacao", "paragrafo_prescricao", "paragrafo_ressarcimento",
+    ]
+    for zone in zones:
+        zid = zone["zone_id"]
+        if zid not in zone_replacements:
+            ctx = (zone["context_before"] + " " + zone["context_after"]).lower()
+            for field in content_fields:
+                keywords = {
+                    "paragrafo_objeto": ["objeto", "portaria", "instaurado"],
+                    "paragrafo_narrativa": ["diligências", "fatos", "relatório", "notícia"],
+                    "paragrafo_transicao": ["perspectiva", "viabilizar", "verificar"],
+                    "paragrafo_aplicacao": ["concreto", "anos", "lapso", "presente"],
+                    "paragrafo_prescricao": ["prescrição", "prescricional"],
+                    "paragrafo_ressarcimento": ["ressarcimento", "erário", "dano"],
+                }
+                if any(k in ctx for k in keywords.get(field, [])):
+                    val = conteudo.get(field)
+                    if val:
+                        red_text_map[zone["red_text"]] = val
+                        break
 
-        # Passo 3 — substitui zonas vermelhas
-        zones = analysis.get("_zones", [])
-        zone_replacements = analysis.get("zone_replacements", {})
-        if zones and zone_replacements:
-            apply_zone_replacements(doc_xml, zones, zone_replacements, work_xml)
-            shutil.copy(work_xml, doc_xml)
-
-        # Passo 4 — remove instruções internas entre colchetes
-        remove_instruction_brackets(doc_xml, work_xml)
-        shutil.copy(work_xml, doc_xml)
-
-        # Passo 5 — empacota
-        pack(unpacked, output_docx, original_docx=template_docx)
+    # Passo 3 — processa com python-docx (preserva header/footer/brasão)
+    keep_markers = analysis.get("keep_hypothesis_markers") or []
+    process_document_with_docx(output_docx, red_text_map, keep_markers)
 
     return output_docx
-
-
-# ---------------------------------------------------------------------------
-# Helper de serialização
-# ---------------------------------------------------------------------------
-
-def _save_xml(tree: etree._ElementTree, output_path: str | Path) -> None:
-    tree.write(
-        str(output_path),
-        xml_declaration=True,
-        encoding="UTF-8",
-        standalone=True,
-    )
