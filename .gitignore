@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+entrada/*
+!entrada/.gitkeep
+saida/*
+!saida/.gitkeep
+processados/*
+!processados/.gitkeep
+modelos/*.docx
+*.tmp/
+unpacked_*/
