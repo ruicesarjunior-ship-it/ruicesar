@@ -95,11 +95,16 @@ def analyze_document(document_text: str) -> dict[str, Any]:
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     system_prompt = _load_system_prompt()
 
+    # Limita o texto para respeitar o limite de tokens da API
+    texto_limitado = document_text[:12000]
+    if len(document_text) > 12000:
+        logger.info("Documento truncado para 12.000 caracteres (original: %d)", len(document_text))
+
     user_message = (
         "Analise o procedimento extrajudicial abaixo e retorne o JSON conforme instruído "
         "no system prompt.\n\n"
         "=== DOCUMENTO ===\n\n"
-        f"{document_text}\n\n"
+        f"{texto_limitado}\n\n"
         "=== FIM DO DOCUMENTO ==="
     )
 
