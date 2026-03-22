@@ -140,37 +140,56 @@ def generate_zone_content(
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-    # Monta a listagem de zonas para o Claude
-    zones_description = "\n".join(
-        f"  ZONA {z['zone_id']}: "
-        f"[antes: \"{z['context_before'][:80]}\"] "
-        f"[VERMELHO: \"{z['red_text'][:120]}\"] "
-        f"[depois: \"{z['context_after'][:80]}\"]"
-        for z in zones
-    )
-
     hipotese = analysis.get("analise", {}).get("hipotese_recomendada", "")
+    hipotese_desc = analysis.get("analise", {}).get("hipotese_descricao", "")
     modelo = analysis.get("analise", {}).get("modelo_word", "")
     conteudo = analysis.get("conteudo", {})
 
-    system = (
-        "Você é um Promotor de Justiça do MPBA especialista em promoções de arquivamento. "
-        "Você preencherá os campos variáveis (ZONAS VERMELHAS) de um template de promoção de "
-        "arquivamento. JAMAIS invente informações não presentes no documento. Use "
-        "[INSERIR: descrição] para dados faltantes. "
-        "Retorne APENAS um JSON válido: {\"replacements\": {\"0\": \"texto\", \"1\": \"texto\", ...}}"
-    )
+    # Monta a listagem de zonas para o Claude com contexto detalhado
+    zones_lines = []
+    for z in zones:
+        lines = [
+            f"--- ZONA {z['zone_id']} ---",
+            f"Texto vermelho atual (a substituir): \"{z['red_text'][:200]}\"",
+        ]
+        if z["context_before"]:
+            lines.append(f"Texto que vem ANTES no documento: \"...{z['context_before'][-120:]}\"")
+        if z["context_after"]:
+            lines.append(f"Texto que vem DEPOIS no documento: \"{z['context_after'][:120]}...\"")
+        zones_lines.append("\n".join(lines))
+    zones_description = "\n\n".join(zones_lines)
+
+    system = """Você é um Promotor de Justiça do MPBA preenchendo zonas de conteúdo variável (texto em vermelho) de um template de promoção de arquivamento.
+
+REGRAS ABSOLUTAS:
+1. Retorne APENAS JSON válido: {"replacements": {"0": "texto", "1": "texto", ...}}
+2. JAMAIS invente fatos, datas, números ou nomes não presentes no documento original.
+3. JAMAIS coloque marcadores de template no conteúdo: não use [HIPÓTESE...], [OMITIR...], [OU –...] ou qualquer texto entre colchetes que seja instrução interna do template.
+4. Use linguagem jurídica formal, na terceira pessoa.
+5. O conteúdo da fase 1 (paragrafo_objeto, paragrafo_narrativa etc.) já foi gerado — USE EXATAMENTE esses parágrafos nas zonas correspondentes, sem reinventá-los.
+6. Para zonas de classe/número do procedimento, use os valores de named_vars.
+7. Se não souber o que preencher em uma zona, deixe o campo com string vazia "" — NUNCA coloque instruções do template."""
 
     user_message = (
-        f"Hipótese selecionada: {hipotese}\n"
-        f"Modelo Word: {modelo}\n\n"
-        f"Conteúdo já gerado pela análise:\n{json.dumps(conteudo, ensure_ascii=False, indent=2)}\n\n"
-        f"=== ZONAS VERMELHAS DO TEMPLATE ===\n{zones_description}\n\n"
-        f"=== DOCUMENTO ORIGINAL ===\n{document_text[:3000]}\n\n"
-        "Para cada ZONA, forneça o texto substituto adequado ao caso concreto. "
-        "Use o conteúdo já gerado pela análise onde aplicável. "
-        "Para zonas de narrativa/relatório, use o texto do documento. "
-        "Retorne JSON: {\"replacements\": {\"<zone_id>\": \"<texto>\", ...}}"
+        f"HIPÓTESE SELECIONADA: {hipotese} — {hipotese_desc}\n"
+        f"MODELO WORD: {modelo}\n\n"
+        f"=== CONTEÚDO JÁ GERADO NA FASE 1 (USE ESTES TEXTOS) ===\n"
+        f"{json.dumps(conteudo, ensure_ascii=False, indent=2)}\n\n"
+        f"=== VARIÁVEIS NOMEADAS ===\n"
+        f"{json.dumps(analysis.get('named_vars', {}), ensure_ascii=False, indent=2)}\n\n"
+        f"=== ZONAS VERMELHAS DO TEMPLATE (preencha cada uma) ===\n\n"
+        f"{zones_description}\n\n"
+        f"=== DOCUMENTO ORIGINAL (use para extrair fatos adicionais se necessário) ===\n"
+        f"{document_text[:4000]}\n\n"
+        "INSTRUÇÃO FINAL: Para cada zona, decida qual conteúdo da fase 1 corresponde "
+        "com base no contexto antes/depois. Tipicamente:\n"
+        "- Zona com contexto 'instaurado para apurar' → use paragrafo_objeto\n"
+        "- Zona com contexto 'diligências' / 'relatório' / 'conclusos' → use paragrafo_narrativa\n"
+        "- Zona com contexto 'perspectiva' / 'eficácia' → use paragrafo_transicao\n"
+        "- Zona com contexto 'caso concreto' / 'lapso' / 'anos' → use paragrafo_aplicacao\n"
+        "- Zona com texto vermelho igual à classe (NF, PA, IC, PP) → use o valor de classeProcessualCNMP\n"
+        "- Zona com texto vermelho igual ao número IDEA → use o valor de numeroIDEA\n\n"
+        "Retorne: {\"replacements\": {\"<zone_id>\": \"<texto_completo>\", ...}}"
     )
 
     logger.info("Gerando conteúdo para %d zonas vermelhas...", len(zones))
@@ -179,7 +198,7 @@ def generate_zone_content(
 
     response = client.messages.create(
         model=settings.claude_model,
-        max_tokens=4096,
+        max_tokens=8096,
         system=system,
         messages=[{"role": "user", "content": user_message}],
     )
@@ -188,8 +207,12 @@ def generate_zone_content(
     parsed = _parse_json_response(raw)
     raw_replacements = parsed.get("replacements", {})
 
-    # Converte chaves para int
-    return {int(k): v for k, v in raw_replacements.items()}
+    # Converte chaves para int e filtra strings vazias
+    result = {}
+    for k, v in raw_replacements.items():
+        if v and v.strip():
+            result[int(k)] = v
+    return result
 
 
 # ---------------------------------------------------------------------------

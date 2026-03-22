@@ -29,12 +29,15 @@ from lxml import etree
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
+# Marcadores de bloco condicional do template — devem aparecer SOZINHOS em um parágrafo
+# Apenas identificam blocos hipótese alternativa (nunca conteúdo de zona vermelha)
 BLOCK_MARKER_RE = re.compile(
-    r"\[(HIPÓTESE|HIPOTESE|OU\s*[–\-]|OMITIR)", re.IGNORECASE
+    r"^\s*\[\s*(?:HIPÓTESE|HIPOTESE|OU\s*[–\-])\b", re.IGNORECASE
 )
 
+# Qualquer parágrafo que seja APENAS texto entre colchetes (instrução interna do template)
 INSTRUCTION_ONLY_RE = re.compile(
-    r"^\s*\[[^\]]*\]\s*$", re.IGNORECASE
+    r"^\s*\[[^\]]{3,}\]\s*$", re.IGNORECASE
 )
 
 # ---------------------------------------------------------------------------
