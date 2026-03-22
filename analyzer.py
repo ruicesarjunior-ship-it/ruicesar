@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -168,6 +169,8 @@ def generate_zone_content(
     )
 
     logger.info("Gerando conteúdo para %d zonas vermelhas...", len(zones))
+    logger.info("Aguardando 15s para respeitar limite de velocidade da API...")
+    time.sleep(15)
 
     response = client.messages.create(
         model=settings.claude_model,
