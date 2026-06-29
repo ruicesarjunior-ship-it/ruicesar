@@ -212,10 +212,22 @@ async function carregarCasca() {
   return await resp.arrayBuffer();
 }
 
+// Extrai o paragrafo do timbre (imagem flutuante ancorada) do corpo da casca,
+// para reinseri-lo no topo do corpo gerado (senao a imagem seria apagada).
+function extrairTimbrePar(docXml) {
+  var s = docXml.indexOf("<w:drawing");
+  if (s === -1) return "";
+  var fim = docXml.indexOf("</w:drawing>", s);
+  if (fim === -1) return "";
+  var drawing = docXml.slice(s, fim + "</w:drawing>".length);
+  return "<w:p><w:pPr><w:spacing w:after=\"0\"/></w:pPr><w:r><w:rPr><w:noProof/></w:rPr>" + drawing + "</w:r></w:p>";
+}
+
 async function montarDocx(bodyXml, cascaBytes) {
   var zip = await JSZip.loadAsync(cascaBytes.slice(0));
   var docXml = await zip.file("word/document.xml").async("string");
-  var newDoc = docXml.replace(/<w:body>[\s\S]*?<w:sectPr/, "<w:body>\n" + bodyXml + "\n<w:sectPr");
+  var timbre = extrairTimbrePar(docXml);
+  var newDoc = docXml.replace(/<w:body>[\s\S]*?<w:sectPr/, "<w:body>\n" + timbre + bodyXml + "\n<w:sectPr");
   zip.file("word/document.xml", newDoc);
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
 }
