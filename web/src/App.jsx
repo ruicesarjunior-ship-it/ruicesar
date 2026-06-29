@@ -318,14 +318,20 @@ var PROMPT_EXTRACAO =
 "Recebe um ou mais arquivos que podem ser DESPACHOS isolados e/ou PROCEDIMENTOS ADMINISTRATIVOS INTEIROS (com vários despachos ao longo das páginas).\n\n" +
 "Tarefa: AGRUPE o conteúdo por NÚMERO DE PROCEDIMENTO (ex.: 201.9.551584/2025, 003.9.000123/2025). Para CADA procedimento:\n" +
 "1) Localize o ÚLTIMO despacho (o mais recente do Promotor). Se ele apenas remeter a despacho anterior (ex.: \"reitere-se\", \"cumpra-se o despacho anterior\", \"conforme despacho de fls. X\", \"renove-se\"), SIGA a cadeia de remissões e considere os comandos efetivamente determinados a cumprir.\n" +
-"2) Liste TODOS os destinatários a quem se determinou OFICIAR, NOTIFICAR ou REQUISITAR.\n" +
-"3) Para cada destinatário, extraia o que estiver disponível: orgao (instituição), vocativo de tratamento (ex.: \"A Sua Excelência o Senhor\", \"A Sua Senhoria o Senhor\", \"Ao Ilustre Conselho Tutelar\"), nomeAutoridade (nome da pessoa, se houver), endereco, cepCidade, email.\n" +
-"4) Gere um ASSUNTO sintético (poucas palavras, ex.: \"Solicita informações.\", \"Requisita documentos.\").\n" +
-"5) Gere o TEOR: frase objetiva que completa \"sirvo-me do presente para solicitar ___\" (ex.: \"informações sobre eventual registro de ocorrência relacionado aos fatos\"). Não inclua o prazo.\n" +
-"6) tipo: PA, IP, NF, IC, PP ou TCO.\n\n" +
+"2) Identifique CADA DILIGÊNCIA determinada. Uma diligência = UM destinatário + o que se determinou SOLICITAR/REQUISITAR ÀQUELE destinatário especificamente.\n\n" +
+"REGRA CRÍTICA DE ATRIBUIÇÃO (leia com atenção):\n" +
+"- O teor de cada diligência deve corresponder EXATAMENTE ao que o despacho mandou pedir ÀQUELE destinatário. NUNCA repita o mesmo teor para destinatários diferentes e NUNCA misture o comando de um destinatário no de outro.\n" +
+"- Use a natureza do pedido para conferir o destinatário correto. Exemplos de pistas: boletim de ocorrência (BO), inquérito policial, situação processual de investigado, registro de ocorrência => DELEGACIA DE POLÍCIA. Relatório psicossocial/acompanhamento de família, medidas de proteção a criança/adolescente => CONSELHO TUTELAR. Acompanhamento socioassistencial, CRAS/CREAS, visita domiciliar social, idoso/vulnerável => CREAS ou CRAS. Atendimento/prontuário médico => SECRETARIA DE SAÚDE/HOSPITAL.\n" +
+"- Se o despacho determinar VÁRIAS coisas ao MESMO destinatário, junte tudo em um único teor para aquele destinatário.\n" +
+"- Se um pedido não indicar destinatário claro, use orgao \"Destinatário a identificar\".\n\n" +
+"Para cada diligência forneça:\n" +
+"- orgao (instituição destinatária), vocativo (ex.: \"A Sua Excelência o Senhor\", \"A Sua Senhoria o Senhor\", \"Ao Ilustre Conselho Tutelar\", \"Ao Coordenador do CREAS\"), nomeAutoridade (nome da pessoa, se houver), endereco, cepCidade, email (o que estiver disponível; vazio se não houver);\n" +
+"- assunto: sintético, poucas palavras (ex.: \"Solicita informações.\", \"Requisita documentos.\");\n" +
+"- teor: frase objetiva que completa \"sirvo-me do presente para solicitar ___\" (ex.: \"informações sobre o andamento do BO nº 220187/2026 e a situação processual do investigado\"). NÃO inclua o prazo.\n\n" +
+"tipo do procedimento: PA, IP, NF, IC, PP ou TCO.\n\n" +
 "Responda SOMENTE com um array JSON, sem markdown e sem explicações, no formato:\n" +
-"[{\"numProc\":\"...\",\"tipo\":\"PA\",\"assunto\":\"...\",\"teor\":\"...\",\"destinatarios\":[{\"orgao\":\"...\",\"vocativo\":\"...\",\"nomeAutoridade\":\"\",\"endereco\":\"\",\"cepCidade\":\"\",\"email\":\"\"}]}]\n" +
-"Se não houver destinatário claro em um procedimento, use \"destinatarios\":[{\"orgao\":\"Destinatário a identificar\"}].";
+"[{\"numProc\":\"...\",\"tipo\":\"NF\",\"diligencias\":[{\"orgao\":\"...\",\"vocativo\":\"...\",\"nomeAutoridade\":\"\",\"endereco\":\"\",\"cepCidade\":\"\",\"email\":\"\",\"assunto\":\"...\",\"teor\":\"...\"}]}]\n" +
+"Se um procedimento não tiver diligência clara, use \"diligencias\":[{\"orgao\":\"Destinatário a identificar\",\"assunto\":\"\",\"teor\":\"\"}].";
 
 // Envia todos os arquivos numa unica chamada e retorna o array de procedimentos.
 async function extrairProcedimentos(files, onProgresso) {
@@ -472,31 +478,35 @@ export default function App() {
     setStep("fila");
   }, []);
 
-  // Aplica a lista de procedimentos (brutos) -> resolve destinatarios -> separa pendentes
+  // Aplica os procedimentos brutos -> achata em diligencias (destinatario + teor proprios)
+  // -> resolve cada destinatario contra o banco -> separa as pendentes.
   function aplicarProcedimentos(brutos) {
-    var lista = [];
-    var naoResolvidosGlobal = [];
-    brutos.forEach(function(b, idx) {
-      var procId = "proc_" + idx;
-      var resolvidos = [];
-      var naoResolvidos = [];
-      (b.destinatarios || []).forEach(function(dst) {
-        var r = resolverDest(dst);
-        if (r) resolvidos.push(r);
-        else {
-          var ia = typeof dst === "object" ? dst : { orgao: String(dst) };
-          naoResolvidos.push({ id:uid(), procId:procId, textoOriginal: ia.orgao || "Destinatário", ia:ia });
-        }
+    var resolvidas = [];
+    var pendentesLocal = [];
+    brutos.forEach(function(b) {
+      var numProc = b.numProc || "Sem número";
+      var tipo = b.tipo || "PA";
+      // compatibilidade: aceita formato antigo (destinatarios + teor unico) e novo (diligencias)
+      var dils = b.diligencias;
+      if (!dils) {
+        dils = (b.destinatarios || []).map(function(dst){
+          var o = typeof dst === "object" ? dst : { orgao: String(dst) };
+          return Object.assign({}, o, { assunto: b.assunto || "", teor: b.teor || "" });
+        });
+      }
+      dils.forEach(function(dil) {
+        var r = resolverDest(dil);
+        var base = { numProc:numProc, tipo:tipo, assunto:dil.assunto || "", teor:dil.teor || "" };
+        if (r) resolvidas.push(Object.assign(base, { dest:r }));
+        else pendentesLocal.push(Object.assign({ id:uid(), textoOriginal: dil.orgao || "Destinatário", ia:dil }, base));
       });
-      lista.push({ procId:procId, numProc:b.numProc || "Sem número", tipo:b.tipo || "PA", assunto:b.assunto || "", teor:b.teor || "", destResolvidos:resolvidos });
-      naoResolvidos.forEach(function(nr){ naoResolvidosGlobal.push(nr); });
     });
-    setProcs(lista);
-    if (naoResolvidosGlobal.length > 0) {
-      setPendentes(naoResolvidosGlobal);
+    setProcs(resolvidas);
+    if (pendentesLocal.length > 0) {
+      setPendentes(pendentesLocal);
       setStep("resolucao");
     } else {
-      finalizar(lista);
+      finalizar(resolvidas);
     }
   }
 
@@ -506,11 +516,11 @@ export default function App() {
     setErroProc("");
     setStep("processando");
 
-    // 1) procedimentos preenchidos manualmente
+    // 1) procedimentos preenchidos manualmente -> uma diligencia por destinatario (mesmo teor)
     var manualProcs = [];
     fila.forEach(function(f) {
       if (f.manual && f.manual.numProc) {
-        manualProcs.push({ numProc:f.manual.numProc, tipo:f.manual.tipo || "PA", assunto:f.manual.assunto || "", teor:f.manual.teor || "", destinatarios:(f.manual.destinatarios || []) });
+        manualProcs.push({ numProc:f.manual.numProc, tipo:f.manual.tipo || "PA", diligencias:(f.manual.destinatarios || []).map(function(t){ return { orgao:t, assunto:f.manual.assunto || "", teor:f.manual.teor || "" }; }) });
       }
     });
     var arquivosIA = fila.filter(function(f){ return !(f.manual && f.manual.numProc); }).map(function(f){ return f.file; });
@@ -526,7 +536,7 @@ export default function App() {
           // sem IA: cria procedimentos vazios a partir do nome do arquivo (para preenchimento manual)
           arquivosIA.forEach(function(f) {
             var numDoNome = f.name.replace(/\.(pdf|txt)$/i,"").replace(/\s*\(\d+\)$/,"").trim();
-            brutos.push({ numProc:numDoNome || "Sem número", tipo:"PA", assunto:"", teor:"", destinatarios:[{ orgao:"Destinatário a identificar" }] });
+            brutos.push({ numProc:numDoNome || "Sem número", tipo:"PA", diligencias:[{ orgao:"Destinatário a identificar", assunto:"", teor:"" }] });
           });
         }
       }
@@ -538,18 +548,18 @@ export default function App() {
     }
   }
 
-  // Consolida por destinatario (juntada) e gera grupos/oficios + certidoes
-  function finalizar(listaProcs) {
+  // Consolida as diligencias por destinatario (juntada) e gera oficios + certidoes.
+  // Cada diligencia ja carrega o SEU teor especifico daquele destinatario.
+  function finalizar(diligencias) {
     var numInicial = parseInt(cfg.numInicial, 10);
     var ano = cfg.ano || String(new Date().getFullYear());
+    function destKey(d) { return d.id || normChave(d.nome); }
     var porDest = {};
-    listaProcs.forEach(function(p) {
-      p.destResolvidos.forEach(function(dest) {
-        var key = dest.id || normChave(dest.nome);
-        if (!porDest[key]) porDest[key] = { dest:dest, itens:[], assuntos:[] };
-        porDest[key].itens.push({ numProc:p.numProc, tipo:p.tipo, teor:p.teor });
-        if (p.assunto && porDest[key].assuntos.indexOf(p.assunto) === -1) porDest[key].assuntos.push(p.assunto);
-      });
+    diligencias.forEach(function(d) {
+      var key = destKey(d.dest);
+      if (!porDest[key]) porDest[key] = { dest:d.dest, itens:[], assuntos:[] };
+      porDest[key].itens.push({ numProc:d.numProc, tipo:d.tipo, teor:d.teor });
+      if (d.assunto && porDest[key].assuntos.indexOf(d.assunto) === -1) porDest[key].assuntos.push(d.assunto);
     });
     var grupos = Object.keys(porDest).map(function(k){ return porDest[k]; });
     grupos.forEach(function(g, i) {
@@ -558,12 +568,12 @@ export default function App() {
     });
     // certidoes por procedimento
     var certsPorProc = {};
-    listaProcs.forEach(function(p) {
-      if (!certsPorProc[p.numProc]) certsPorProc[p.numProc] = { numProc:p.numProc, tipo:p.tipo, exps:[] };
-      p.destResolvidos.forEach(function(dest) {
-        var g = grupos.find(function(g){ return (g.dest.id || normChave(g.dest.nome)) === (dest.id || normChave(dest.nome)); });
-        if (g) certsPorProc[p.numProc].exps.push({ nome:dest.nome, numOficio:g.numOficio });
-      });
+    diligencias.forEach(function(d) {
+      if (!certsPorProc[d.numProc]) certsPorProc[d.numProc] = { numProc:d.numProc, tipo:d.tipo, exps:[] };
+      var g = grupos.find(function(g){ return destKey(g.dest) === destKey(d.dest); });
+      if (g && !certsPorProc[d.numProc].exps.some(function(e){ return e.numOficio === g.numOficio; })) {
+        certsPorProc[d.numProc].exps.push({ nome:d.dest.nome, numOficio:g.numOficio });
+      }
     });
     setResultado({ grupos:grupos, certs:Object.keys(certsPorProc).map(function(k){ return certsPorProc[k]; }) });
     setStep("resultado");
@@ -817,18 +827,18 @@ export default function App() {
           // salva no banco os marcados
           var novosParaSalvar = extras.filter(function(r){ return r.salvar && r.nome; });
           if (novosParaSalvar.length > 0) {
-            var novaLista = destDB.concat(novosParaSalvar.map(function(r){ return { id:uid(), comarca:comarca, chave:r.chave||normChave(r.nome).slice(0,24), nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", tipo:"institucional" }; }));
+            var vistos = {};
+            var unicos = novosParaSalvar.filter(function(r){ var k=normChave(r.nome); if(vistos[k]) return false; vistos[k]=1; return true; });
+            var novaLista = destDB.concat(unicos.map(function(r){ return { id:uid(), comarca:comarca, chave:r.chave||normChave(r.nome).slice(0,24), nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", tipo:"institucional" }; }));
             salvarDest(novaLista);
           }
-          // injeta os destinatarios resolvidos manualmente em seus procedimentos
-          var porProc = {};
-          extras.forEach(function(r){ if(!r.nome) return; (porProc[r.procId]=porProc[r.procId]||[]).push({ id:uid(), nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) }); });
-          var listaAtualizada = procs.map(function(p){
-            var add = porProc[p.procId] || [];
-            return add.length ? Object.assign({}, p, { destResolvidos: p.destResolvidos.concat(add) }) : p;
+          // cada pendente vira uma diligencia resolvida (mantendo seu proprio teor)
+          var novasDilig = extras.filter(function(r){ return r.nome; }).map(function(r){
+            return { numProc:r.numProc, tipo:r.tipo, assunto:r.assunto||"", teor:r.teor||"", dest:{ nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) } };
           });
-          setProcs(listaAtualizada);
-          finalizar(listaAtualizada);
+          var todas = procs.concat(novasDilig);
+          setProcs(todas);
+          finalizar(todas);
         },
         onPular:function(){ finalizar(procs); }
       }),
@@ -836,7 +846,7 @@ export default function App() {
       // RESULTADO
       step === "resultado" && resultado && React.createElement("div", null,
         React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:14 } },
-          [["Ofícios", resultado.grupos.length],["Certidões", resultado.certs.length],["Procedimentos", procs.length]].map(function(item) {
+          [["Ofícios", resultado.grupos.length],["Certidões", resultado.certs.length],["Diligências", procs.length]].map(function(item) {
             return React.createElement("div", { key:item[0], style:Object.assign({},C.card,{padding:16,textAlign:"center",marginBottom:0}) },
               React.createElement("div", { style:{ fontSize:28, fontWeight:"bold", color:C.azul } }, item[1]),
               React.createElement("div", { style:{ fontSize:12, color:"#888" } }, item[0])
@@ -1039,7 +1049,8 @@ function TelaResolucao(props) {
     ),
     itens.map(function(item, idx) {
       return React.createElement("div", { key:item.id, style:Object.assign({},C.card) },
-        React.createElement("div", { style:{ fontWeight:"bold", color:"#0a2440", fontSize:14, marginBottom:10 } }, (idx+1) + ". \"" + item.textoOriginal + "\""),
+        React.createElement("div", { style:{ fontWeight:"bold", color:"#0a2440", fontSize:14, marginBottom:4 } }, (idx+1) + ". \"" + item.textoOriginal + "\""),
+        React.createElement("div", { style:{ fontSize:11, color:"#888", marginBottom:10 } }, "Procedimento " + (item.numProc||"?") + (item.teor ? " — " + item.teor.slice(0,120) + (item.teor.length>120?"...":"") : "")),
         React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 } },
           [["Órgão / Nome *","nome","Delegacia de Polícia de ..."],["Vocativo","vocativo","A Sua Excelência o Senhor"],["Nome da autoridade","nomeAutoridade",""],["Email","email","email@dominio.com"],["Endereço","endereco","Av. ..., nº, bairro"],["CEP / Cidade","cepCidade","00000-000 Cidade - BA"],["Palavra-chave","chave","como aparece no despacho"]].map(function(field) {
             return React.createElement("div", { key:field[1], style: field[1]==="nome"?{gridColumn:"1/-1"}:null },
@@ -1056,7 +1067,7 @@ function TelaResolucao(props) {
     }),
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:8 } },
       React.createElement("button", { style:btnOut(), onClick:onPular }, "Pular e gerar assim mesmo"),
-      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,procId:x.procId}); })); } }, "Confirmar e gerar ofícios")
+      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,numProc:x.numProc,tipo:x.tipo,assunto:x.assunto,teor:x.teor}); })); } }, "Confirmar e gerar ofícios")
     )
   );
 }
