@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import JSZip from "jszip";
+import * as pdfjsLib from "pdfjs-dist";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // ============================================================================
 // Configuracao da API Anthropic (chamada direta pelo navegador).
-// A chave NUNCA vai para nenhum servidor nosso: fica apenas no localStorage do
-// navegador do usuario e e enviada direto para api.anthropic.com.
+// A chave fica apenas no localStorage do navegador e vai direto para a Anthropic.
 // ============================================================================
-var API = { key: "", model: "claude-sonnet-4-6", usarIA: true };
+var API = { key: "", model: "claude-sonnet-4-6", usarIA: true, promotor: "Rui César Farias dos Santos Júnior" };
 
 function carregarSettings() {
   try {
@@ -14,17 +17,19 @@ function carregarSettings() {
     API.key = s.key || "";
     API.model = s.model || "claude-sonnet-4-6";
     API.usarIA = s.usarIA !== false;
+    API.promotor = s.promotor || "Rui César Farias dos Santos Júnior";
   } catch (e) {}
-  return { key: API.key, model: API.model, usarIA: API.usarIA };
+  return { key: API.key, model: API.model, usarIA: API.usarIA, promotor: API.promotor };
 }
 function salvarSettings(s) {
   API.key = s.key || "";
   API.model = s.model || "claude-sonnet-4-6";
   API.usarIA = s.usarIA !== false;
-  try { localStorage.setItem("mpba:settings", JSON.stringify({ key: API.key, model: API.model, usarIA: API.usarIA })); } catch (e) {}
+  API.promotor = s.promotor || "Rui César Farias dos Santos Júnior";
+  try { localStorage.setItem("mpba:settings", JSON.stringify({ key: API.key, model: API.model, usarIA: API.usarIA, promotor: API.promotor })); } catch (e) {}
 }
 
-// Storage helpers (localStorage no lugar do window.storage do runtime de artefatos)
+// Storage helpers (localStorage)
 async function sGet(key) {
   try { var r = localStorage.getItem(key); return r ? JSON.parse(r) : null; } catch { return null; }
 }
@@ -34,138 +39,180 @@ async function sSet(key, val) {
 
 // Comarcas
 const COMARCAS = {
-  prado:       { label: "Prado/BA",       email: "prado@mpba.mp.br",       promotoria: "Promotorias de Justica de Prado e Nova Vicosa" },
-  nova_vicosa: { label: "Nova Vicosa/BA", email: "nova.vicosa@mpba.mp.br", promotoria: "Promotorias de Justica de Prado e Nova Vicosa" },
-  alcobaca:    { label: "Alcobaca/BA",    email: "alcobaca@mpba.mp.br",    promotoria: "Promotoria de Justica de Alcobaca" },
+  prado:       { label: "Prado/BA",       cidade: "Prado",       email: "prado@mpba.mp.br",       promotoria: "Promotorias de Justiça de Prado e Nova Viçosa" },
+  nova_vicosa: { label: "Nova Viçosa/BA", cidade: "Nova Viçosa", email: "novavicosa@mpba.mp.br",  promotoria: "Promotorias de Justiça de Prado e Nova Viçosa" },
+  alcobaca:    { label: "Alcobaça/BA",    cidade: "Alcobaça",    email: "alcobaca@mpba.mp.br",    promotoria: "Promotoria de Justiça de Alcobaça" },
 };
 
+// Destinatarios iniciais (campos: vocativo, nomeAutoridade, nome=orgao, endereco, cepCidade, email)
 const DEST_INICIAIS = [
-  { id:"di01", comarca:"prado",       chave:"conselho tutelar", nome:"Conselho Tutelar de Prado",              email:"", tratamento:"Ao Ilustre Conselheiro Tutelar",          tipo:"institucional" },
-  { id:"di02", comarca:"prado",       chave:"creas",            nome:"CREAS Prado/BA",                         email:"", tratamento:"Ao Coordenador do CREAS",                 tipo:"institucional" },
-  { id:"di03", comarca:"prado",       chave:"cras",             nome:"CRAS Prado/BA",                          email:"", tratamento:"Ao Coordenador do CRAS",                  tipo:"institucional" },
-  { id:"di04", comarca:"prado",       chave:"policia civil",    nome:"Delegacia de Policia Civil de Prado/BA", email:"", tratamento:"Ao Delegado de Policia",                  tipo:"institucional" },
-  { id:"di05", comarca:"prado",       chave:"prefeitura",       nome:"Prefeitura Municipal de Prado/BA",       email:"", tratamento:"Ao Prefeito Municipal",                   tipo:"institucional" },
-  { id:"di06", comarca:"prado",       chave:"secretaria saude", nome:"Secretaria de Saude de Prado/BA",        email:"", tratamento:"Ao Secretario Municipal de Saude",        tipo:"institucional" },
-  { id:"di07", comarca:"prado",       chave:"hospital",         nome:"Hospital Municipal de Prado/BA",         email:"", tratamento:"Ao Diretor do Hospital Municipal",        tipo:"institucional" },
-  { id:"di08", comarca:"nova_vicosa", chave:"conselho tutelar", nome:"Conselho Tutelar de Nova Vicosa",        email:"", tratamento:"Ao Ilustre Conselheiro Tutelar",          tipo:"institucional" },
-  { id:"di09", comarca:"nova_vicosa", chave:"creas",            nome:"CREAS Nova Vicosa/BA",                   email:"", tratamento:"Ao Coordenador do CREAS",                 tipo:"institucional" },
-  { id:"di10", comarca:"nova_vicosa", chave:"policia civil",    nome:"Delegacia de Policia Civil Nova Vicosa", email:"", tratamento:"Ao Delegado de Policia",                  tipo:"institucional" },
-  { id:"di11", comarca:"nova_vicosa", chave:"prefeitura",       nome:"Prefeitura Municipal de Nova Vicosa/BA", email:"", tratamento:"Ao Prefeito Municipal",                   tipo:"institucional" },
-  { id:"di12", comarca:"alcobaca",    chave:"conselho tutelar", nome:"Conselho Tutelar de Alcobaca",           email:"", tratamento:"Ao Ilustre Conselheiro Tutelar",          tipo:"institucional" },
-  { id:"di13", comarca:"alcobaca",    chave:"policia civil",    nome:"Delegacia de Policia Civil de Alcobaca", email:"", tratamento:"Ao Delegado de Policia",                  tipo:"institucional" },
-  { id:"di14", comarca:"alcobaca",    chave:"prefeitura",       nome:"Prefeitura Municipal de Alcobaca/BA",    email:"", tratamento:"Ao Prefeito Municipal",                   tipo:"institucional" },
+  { id:"di01", comarca:"prado",       chave:"conselho tutelar", nome:"Conselho Tutelar de Prado",              vocativo:"Ao Ilustre Conselho Tutelar",     nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di02", comarca:"prado",       chave:"creas",            nome:"CREAS de Prado",                         vocativo:"Ao Coordenador do CREAS",         nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di03", comarca:"prado",       chave:"cras",             nome:"CRAS de Prado",                          vocativo:"Ao Coordenador do CRAS",          nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di04", comarca:"prado",       chave:"policia civil",    nome:"Delegacia de Polícia Civil de Prado",    vocativo:"A Sua Senhoria o Senhor",         nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di05", comarca:"prado",       chave:"prefeitura",       nome:"Prefeitura Municipal de Prado",          vocativo:"A Sua Excelência o Senhor",       nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di06", comarca:"prado",       chave:"secretaria saude", nome:"Secretaria Municipal de Saúde de Prado", vocativo:"A Sua Excelência o Senhor",       nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di07", comarca:"prado",       chave:"hospital",         nome:"Hospital Municipal de Prado",            vocativo:"Ao Diretor do Hospital Municipal", nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di08", comarca:"nova_vicosa", chave:"conselho tutelar", nome:"Conselho Tutelar de Nova Viçosa",        vocativo:"Ao Ilustre Conselho Tutelar",     nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di09", comarca:"nova_vicosa", chave:"creas",            nome:"CREAS de Nova Viçosa",                   vocativo:"Ao Coordenador do CREAS",         nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di10", comarca:"nova_vicosa", chave:"policia civil",    nome:"Delegacia de Polícia Civil de Nova Viçosa", vocativo:"A Sua Senhoria o Senhor",      nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di11", comarca:"nova_vicosa", chave:"prefeitura",       nome:"Prefeitura Municipal de Nova Viçosa",     vocativo:"A Sua Excelência o Senhor",       nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di12", comarca:"alcobaca",    chave:"conselho tutelar", nome:"Conselho Tutelar de Alcobaça",           vocativo:"Ao Ilustre Conselho Tutelar",     nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di13", comarca:"alcobaca",    chave:"policia civil",    nome:"Delegacia de Polícia Civil de Alcobaça", vocativo:"A Sua Senhoria o Senhor",         nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
+  { id:"di14", comarca:"alcobaca",    chave:"prefeitura",       nome:"Prefeitura Municipal de Alcobaça",       vocativo:"A Sua Excelência o Senhor",       nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" },
 ];
 
 const SERV_INICIAIS = [
-  { id:"sv01", nome:"Rodrigo Ribeiro Secundino",    matricula:"355.757", comarca:"prado"       },
-  { id:"sv02", nome:"Jose Jacques Barros Guarino",  matricula:"--",      comarca:"nova_vicosa" },
+  { id:"sv01", nome:"Rodrigo Ribeiro Secundino",   matricula:"355.757", cargo:"Assistente Técnico Administrativo", comarca:"prado"       },
+  { id:"sv02", nome:"Jose Jacques Barros Guarino", matricula:"--",      cargo:"Assistente Técnico Administrativo", comarca:"nova_vicosa" },
 ];
 
 const TIPOS_PROC = ["PA", "IP", "NF", "IC", "PP", "TCO"];
 
 function uid() { return "id_" + Date.now() + "_" + Math.random().toString(36).slice(2); }
 
-function encXml(s) {
-  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+// Migra um destinatario salvo no formato antigo (tratamento) para o novo (vocativo + campos)
+function migrarDest(d) {
+  return Object.assign({ vocativo:"", nomeAutoridade:"", endereco:"", cepCidade:"", email:"" }, d, {
+    vocativo: d.vocativo || d.tratamento || "",
+  });
 }
 
+function encXml(s) {
+  return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// Paragrafo do corpo do .docx. Padrao: Times New Roman, sz 22 (=11pt), espacamento simples.
 function xmlPar(texto, opts) {
-  var bold = opts && opts.bold ? true : false;
-  var size = (opts && opts.size) ? opts.size : 20;
-  var align = (opts && opts.align) ? opts.align : "both";
-  var sb = (opts && opts.sb) ? opts.sb : 0;
-  var sa = (opts && opts.sa) ? opts.sa : 0;
-  var ind = (opts && opts.ind) ? opts.ind : 0;
-  var jc = align === "center" ? "center" : align === "right" ? "right" : "both";
-  var indTag = ind ? "<w:ind w:left=\"" + ind + "\"/>" : "";
+  opts = opts || {};
+  var bold = !!opts.bold;
+  var size = opts.size || 22;
+  var align = opts.align || "both";
+  var sb = opts.sb || 0;
+  var sa = opts.sa || 0;
+  var firstLine = opts.firstLine || 0;
+  var font = opts.font || "Times New Roman";
+  var jc = align === "center" ? "center" : align === "right" ? "right" : align === "left" ? "left" : "both";
+  var indTag = firstLine ? "<w:ind w:firstLine=\"" + firstLine + "\"/>" : "";
   var bTag = bold ? "<w:b/>" : "";
   var sz = "<w:sz w:val=\"" + size + "\"/><w:szCs w:val=\"" + size + "\"/>";
-  var sp = "<w:spacing w:before=\"" + sb + "\" w:after=\"" + sa + "\" w:line=\"360\" w:lineRule=\"auto\"/>";
-  var font = "<w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\" w:cs=\"Arial\"/>";
-  return "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/><w:autoSpaceDE w:val=\"0\"/>" + sp + indTag + "<w:jc w:val=\"" + jc + "\"/><w:rPr>" + font + bTag + sz + "</w:rPr></w:pPr><w:r><w:rPr>" + font + bTag + sz + "</w:rPr><w:t xml:space=\"preserve\">" + encXml(texto) + "</w:t></w:r></w:p>";
+  var sp = "<w:spacing w:before=\"" + sb + "\" w:after=\"" + sa + "\"/>";
+  var fontTag = "<w:rFonts w:ascii=\"" + font + "\" w:hAnsi=\"" + font + "\" w:cs=\"" + font + "\"/>";
+  return "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/>" + sp + indTag + "<w:jc w:val=\"" + jc + "\"/><w:rPr>" + fontTag + bTag + sz + "</w:rPr></w:pPr><w:r><w:rPr>" + fontTag + bTag + sz + "</w:rPr><w:t xml:space=\"preserve\">" + encXml(texto) + "</w:t></w:r></w:p>";
 }
 
 function xmlVazio() {
-  return "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/><w:autoSpaceDE w:val=\"0\"/><w:spacing w:line=\"360\" w:lineRule=\"auto\"/></w:pPr></w:p>";
+  return "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/></w:pPr></w:p>";
 }
 
-function gerarBodyOficio(opts) {
-  var dest = opts.destinatario;
-  var itens = opts.itens;
-  var numOficio = opts.numOficio;
-  var data = opts.data;
-  var promotoria = opts.promotoria;
-  var cidade = opts.cidade;
-  var x = "";
-  x += xmlPar(dest.tratamento, { bold:true, size:22, align:"center", sa:60 });
-  x += xmlPar(dest.nome, { size:20, align:"center", sa:120 });
-  x += xmlVazio();
-  x += xmlPar("OFICIO No " + numOficio, { bold:true, size:22, align:"center", sa:80 });
-  x += xmlVazio();
-  x += xmlPar(dest.tratamento.replace(/^Ao /,"") + ",", { size:20, sa:60 });
-  x += xmlVazio();
-  x += xmlPar("Cumprimentando-o cordialmente, o Promotor de Justica da " + promotoria + ", no uso de suas atribuicoes legais, solicita a Vossa Senhoria o atendimento das seguintes diligencias, em cumprimento aos despachos exarados nos procedimentos abaixo, cujas copias seguem em anexo:", { size:20, sa:80 });
-  x += xmlVazio();
-  for (var i = 0; i < itens.length; i++) {
-    var item = itens[i];
-    var font = "<w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\" w:cs=\"Arial\"/>";
-    x += "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/><w:autoSpaceDE w:val=\"0\"/><w:spacing w:before=\"80\" w:after=\"80\" w:line=\"360\" w:lineRule=\"auto\"/><w:ind w:left=\"720\" w:hanging=\"360\"/><w:jc w:val=\"both\"/></w:pPr>";
-    x += "<w:r><w:rPr>" + font + "<w:b/><w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr><w:t xml:space=\"preserve\">" + (i+1) + ". " + encXml(item.numProc) + " (" + encXml(item.tipo) + "): </w:t></w:r>";
-    x += "<w:r><w:rPr>" + font + "<w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr><w:t xml:space=\"preserve\">" + encXml(item.teor) + "</w:t></w:r></w:p>";
-  }
-  x += xmlVazio();
-  x += xmlPar("Prazo para resposta: 15 (quinze) dias uteis, nos termos do art. 26, par. 3., da Lei no 8.625/1993.", { size:20, sa:80 });
-  x += xmlVazio();
-  x += xmlPar("Atenciosamente,", { size:20, align:"center", sa:80 });
-  x += xmlPar(cidade + "/BA, " + data + ".", { size:20, align:"center", sa:240 });
-  x += xmlPar("REMI CESAR FARIAS DOS SANTOS JUNIOR", { bold:true, size:20, align:"center" });
-  x += xmlPar("Promotor de Justica Substituto", { size:20, align:"center" });
-  x += xmlPar(promotoria, { size:20, align:"center" });
+// Item numerado de diligencia (referencia em negrito + teor normal)
+function xmlItemDiligencia(n, numProc, tipo, teor) {
+  var font = "<w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\" w:cs=\"Times New Roman\"/>";
+  var x = "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/><w:spacing w:before=\"40\" w:after=\"40\"/><w:ind w:left=\"720\" w:hanging=\"360\"/><w:jc w:val=\"both\"/></w:pPr>";
+  x += "<w:r><w:rPr>" + font + "<w:b/><w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">" + n + ". Referência " + encXml(numProc) + (tipo ? " (" + encXml(tipo) + ")" : "") + ": </w:t></w:r>";
+  x += "<w:r><w:rPr>" + font + "<w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">" + encXml(teor) + "</w:t></w:r></w:p>";
   return x;
 }
 
-function gerarBodyCertidao(opts) {
-  var numProc = opts.numProc;
-  var tipo = opts.tipo;
-  var expedicoes = opts.expedicoes;
-  var data = opts.data;
-  var nomeServ = opts.nomeServ;
-  var matServ = opts.matServ;
-  var promotoria = opts.promotoria;
-  var cidade = opts.cidade;
+// Corpo do oficio no formato do modelo MPBA (com juntada de varios procedimentos)
+function gerarBodyOficio(o) {
+  var d = o.dest;
+  var itens = o.itens;            // [{numProc, tipo, teor}]
+  var numOficio = o.numOficio;
+  var assunto = o.assunto;
+  var promotor = o.promotor;
+  var promotoriaCidade = o.promotoriaCidade;  // cidade da comarca (do promotor)
+  var emailResp = o.emailResp;
+  var servNome = o.servNome;
+  var servCargo = o.servCargo;
+  var x = "";
+
+  x += xmlPar("Ofício nº " + numOficio, { size:22 });
+  x += xmlPar("(Na resposta, favor fazer referência ao nº acima)", { size:18 });
+  x += xmlVazio();
+  x += xmlPar(promotoriaCidade + ", data da assinatura eletrônica.", { size:22, align:"right" });
+  x += xmlVazio();
+
+  // Bloco do destinatario
+  if (d.vocativo) x += xmlPar(d.vocativo, { size:22, align:"left" });
+  if (d.nomeAutoridade) x += xmlPar(d.nomeAutoridade, { size:22, align:"left", bold:true });
+  x += xmlPar(d.nome, { size:22, align:"left" });
+  if (d.endereco) x += xmlPar(d.endereco, { size:22, align:"left" });
+  if (d.cepCidade) x += xmlPar(d.cepCidade, { size:22, align:"left" });
+  x += xmlVazio();
+
+  x += xmlPar("Assunto: " + (assunto || "Solicita providências."), { size:22 });
+  var refs = itens.map(function(i){ return i.numProc; }).join("; ");
+  x += xmlPar("Referência: " + refs + ".", { size:22 });
+  x += xmlVazio();
+
+  if (itens.length === 1) {
+    x += xmlPar("Cumprimentando-o cordialmente e de ordem do Excelentíssimo Senhor Doutor " + promotor + ", Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar " + itens[0].teor + ", no prazo de 15 (quinze) dias.", { size:22, firstLine:708 });
+  } else {
+    x += xmlPar("Cumprimentando-o cordialmente e de ordem do Excelentíssimo Senhor Doutor " + promotor + ", Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar o atendimento das diligências abaixo relacionadas, no prazo de 15 (quinze) dias:", { size:22, firstLine:708 });
+    x += xmlVazio();
+    for (var i = 0; i < itens.length; i++) {
+      x += xmlItemDiligencia(i+1, itens[i].numProc, itens[i].tipo, itens[i].teor);
+    }
+  }
+  x += xmlVazio();
+  x += xmlPar("A resposta deverá ser encaminhada para o endereço eletrônico " + emailResp, { size:22 });
+  x += xmlVazio();
+  x += xmlPar("Respeitosamente,", { size:22 });
+  x += xmlVazio();
+  x += xmlPar("(assinado eletronicamente)", { size:22, align:"center" });
+  x += xmlPar(servNome, { size:22, align:"center" });
+  x += xmlPar(servCargo, { size:22, align:"center" });
+  return x;
+}
+
+// Certidao de expedicao (juntada aos autos)
+function gerarBodyCertidao(o) {
+  var numProc = o.numProc;
+  var tipo = o.tipo;
+  var expedicoes = o.expedicoes;
+  var data = o.data;
+  var nomeServ = o.nomeServ;
+  var cargoServ = o.cargoServ;
+  var matServ = o.matServ;
+  var promotoria = o.promotoria;
+  var cidade = o.cidade;
   var x = "";
   x += xmlPar(numProc, { bold:true, size:24, align:"center", sa:60 });
   x += xmlVazio();
-  x += xmlPar("CERTIDAO DE EXPEDICAO", { bold:true, size:22, align:"center", sa:80 });
+  x += xmlPar("CERTIDÃO DE EXPEDIÇÃO", { bold:true, size:24, align:"center", sa:80 });
   x += xmlVazio();
-  x += xmlPar("Certifico que, em " + data + ", foram expedidos os oficios abaixo em cumprimento ao despacho exarado nos presentes autos do " + tipo + ", dando-se notificacao aos seguintes destinatarios:", { size:20, sa:80 });
+  x += xmlPar("Certifico que, em " + data + ", foram expedidos os ofícios abaixo em cumprimento ao despacho exarado nos presentes autos do " + tipo + ", dando-se notificação aos seguintes destinatários:", { size:22, firstLine:708, sa:80 });
   x += xmlVazio();
   for (var i = 0; i < expedicoes.length; i++) {
-    var font = "<w:rFonts w:ascii=\"Arial\" w:hAnsi=\"Arial\" w:cs=\"Arial\"/>";
-    x += "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/><w:autoSpaceDE w:val=\"0\"/><w:spacing w:before=\"60\" w:after=\"60\" w:line=\"360\" w:lineRule=\"auto\"/><w:ind w:left=\"720\" w:hanging=\"360\"/><w:jc w:val=\"both\"/></w:pPr>";
-    x += "<w:r><w:rPr>" + font + "<w:sz w:val=\"20\"/><w:szCs w:val=\"20\"/></w:rPr><w:t xml:space=\"preserve\">" + (i+1) + ". " + encXml(expedicoes[i].nome) + " -- Oficio no " + encXml(expedicoes[i].numOficio) + "</w:t></w:r></w:p>";
+    x += xmlItemSimples(i+1, expedicoes[i].nome + " — Ofício nº " + expedicoes[i].numOficio);
   }
   x += xmlVazio();
-  x += xmlPar("Para constar, lavro a presente certidao.", { size:20, sa:80 });
+  x += xmlPar("Para constar, lavro a presente certidão.", { size:22, firstLine:708, sa:80 });
   x += xmlVazio();
-  x += xmlPar(cidade + "/BA, " + data + ".", { size:20, align:"center", sa:240 });
-  x += xmlPar(nomeServ.toUpperCase(), { bold:true, size:20, align:"center" });
-  x += xmlPar("Servidor(a) - Matricula no " + matServ, { size:20, align:"center" });
-  x += xmlPar(promotoria, { size:20, align:"center" });
+  x += xmlPar(cidade + ", data da assinatura eletrônica.", { size:22, align:"right", sa:240 });
+  x += xmlVazio();
+  x += xmlPar("(assinado eletronicamente)", { size:22, align:"center" });
+  x += xmlPar(nomeServ, { bold:true, size:22, align:"center" });
+  x += xmlPar(cargoServ + (matServ && matServ !== "--" ? " — Matrícula nº " + matServ : ""), { size:22, align:"center" });
   return x;
 }
 
-// Carrega a casca timbrada (.docx oficial do MPBA) embutida no app como asset.
+function xmlItemSimples(n, texto) {
+  var font = "<w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\" w:cs=\"Times New Roman\"/>";
+  var x = "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/><w:spacing w:before=\"40\" w:after=\"40\"/><w:ind w:left=\"720\" w:hanging=\"360\"/><w:jc w:val=\"both\"/></w:pPr>";
+  x += "<w:r><w:rPr>" + font + "<w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">" + n + ". " + encXml(texto) + "</w:t></w:r></w:p>";
+  return x;
+}
+
+// Carrega a casca timbrada embutida no app
 async function carregarCasca() {
   var resp = await fetch(import.meta.env.BASE_URL + "casca.docx");
-  if (!resp.ok) throw new Error("Nao foi possivel carregar o modelo timbrado (casca.docx). HTTP " + resp.status);
+  if (!resp.ok) throw new Error("Não foi possível carregar o modelo timbrado (casca.docx). HTTP " + resp.status);
   return await resp.arrayBuffer();
 }
 
-// Monta o .docx final injetando o corpo gerado no lugar do corpo da casca timbrada,
-// preservando cabecalho/rodape com o timbre oficial.
 async function montarDocx(bodyXml, cascaBytes) {
-  // slice(0) clona o ArrayBuffer para permitir reutilizar a casca varias vezes.
   var zip = await JSZip.loadAsync(cascaBytes.slice(0));
   var docXml = await zip.file("word/document.xml").async("string");
   var newDoc = docXml.replace(/<w:body>[\s\S]*?<w:sectPr/, "<w:body>\n" + bodyXml + "\n<w:sectPr");
@@ -173,16 +220,20 @@ async function montarDocx(bodyXml, cascaBytes) {
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
 }
 
-function gerarEml(opts) {
-  var dest = opts.dest;
-  var numOficio = opts.numOficio;
-  var promotoriaEmail = opts.promotoriaEmail;
-  var data = opts.data;
-  var promotoria = opts.promotoria;
-  var assunto = "Oficio no " + numOficio + " - " + promotoria;
-  var corpo = "<p>" + dest.tratamento.replace(/^Ao /,"") + ",</p><p>Encaminhamos em anexo o <strong>Oficio no " + numOficio + "</strong>, expedido pela " + promotoria + ", com diligencias a serem cumpridas. Seguem tambem os despachos originais de cada procedimento.</p><p><strong>Prazo: 15 (quinze) dias uteis.</strong></p><p>Atenciosamente,<br><strong>REMI CESAR FARIAS DOS SANTOS JUNIOR</strong><br>Promotor de Justica Substituto<br>" + promotoria + "<br>" + data + "</p>";
+function gerarEml(o) {
+  var d = o.dest;
+  var numOficio = o.numOficio;
+  var promotoriaEmail = o.promotoriaEmail;
+  var promotoria = o.promotoria;
+  var servNome = o.servNome;
+  var servCargo = o.servCargo;
+  var assunto = "Ofício nº " + numOficio + " - " + promotoria;
+  var corpo = "<p>" + (d.vocativo || "Prezado(a)") + ",</p>"
+    + "<p>Encaminhamos em anexo o <strong>Ofício nº " + numOficio + "</strong>, expedido pela " + promotoria + ", com diligências a serem cumpridas. Seguem também as cópias dos respectivos procedimentos.</p>"
+    + "<p><strong>Prazo: 15 (quinze) dias.</strong></p>"
+    + "<p>Respeitosamente,<br>(assinado eletronicamente)<br><strong>" + servNome + "</strong><br>" + servCargo + "<br>" + promotoria + "</p>";
   var bd = "boundary_" + Date.now();
-  var eml = "MIME-Version: 1.0\r\nFrom: " + promotoriaEmail + "\r\n" + (dest.email ? "To: " + dest.email + "\r\n" : "") + "Subject: " + assunto + "\r\nContent-Type: multipart/mixed; boundary=\"" + bd + "\"\r\n\r\n--" + bd + "\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" + corpo + "\r\n\r\n--" + bd + "--\r\n";
+  var eml = "MIME-Version: 1.0\r\nFrom: " + promotoriaEmail + "\r\n" + (d.email ? "To: " + d.email + "\r\n" : "") + "Subject: " + assunto + "\r\nContent-Type: multipart/mixed; boundary=\"" + bd + "\"\r\n\r\n--" + bd + "\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" + corpo + "\r\n\r\n--" + bd + "--\r\n";
   return { eml: eml, assunto: assunto };
 }
 
@@ -196,43 +247,19 @@ function anthropicHeaders() {
   };
 }
 
-async function callClaude(prompt) {
-  if (!API.key) throw new Error("Chave da API Anthropic nao configurada.");
+async function anthropicMessages(opts) {
+  if (!API.key) throw new Error("Chave da API Anthropic não configurada.");
   var r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: anthropicHeaders(),
-    body: JSON.stringify({ model: API.model, max_tokens: 1000, messages: [{ role: "user", content: prompt }] })
+    body: JSON.stringify({ model: API.model, max_tokens: opts.max_tokens || 4000, messages: [{ role: "user", content: opts.content }] })
   });
   var d = await r.json();
   if (d.error) throw new Error("API erro: " + (d.error.message || JSON.stringify(d.error)));
-  if (!d.content || !d.content[0]) throw new Error("API sem conteudo. HTTP: " + r.status);
-  return d.content[0].text;
+  if (!d.content || !d.content[0]) throw new Error("API sem conteúdo. HTTP: " + r.status);
+  return d.content.filter(function(b){ return b.type === "text"; }).map(function(b){ return b.text; }).join("\n");
 }
 
-async function callClaudeComPDF(b64, prompt) {
-  if (!API.key) throw new Error("Chave da API Anthropic nao configurada.");
-  var r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: anthropicHeaders(),
-    body: JSON.stringify({
-      model: API.model,
-      max_tokens: 1000,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } },
-          { type: "text", text: prompt }
-        ]
-      }]
-    })
-  });
-  var d = await r.json();
-  if (d.error) throw new Error("API erro: " + (d.error.message || JSON.stringify(d.error)));
-  if (!d.content || !d.content[0]) throw new Error("API sem conteudo. HTTP: " + r.status);
-  return d.content[0].text;
-}
-
-// Le arquivo como base64 (para PDFs) ou texto puro
 function lerArquivoBase64(file) {
   return new Promise(function(resolve) {
     var reader = new FileReader();
@@ -249,58 +276,76 @@ function lerArquivoTexto(file) {
   });
 }
 
-// Extrai JSON de forma robusta mesmo com texto extra ao redor
+// Extrai o texto de um PDF no navegador (pdf.js). Retorna "" se nao houver camada de texto.
+async function extrairTextoPDF(file) {
+  var buf = await file.arrayBuffer();
+  var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  var texto = "";
+  var maxPag = Math.min(pdf.numPages, 400);
+  for (var p = 1; p <= maxPag; p++) {
+    var page = await pdf.getPage(p);
+    var content = await page.getTextContent();
+    texto += content.items.map(function(it){ return it.str; }).join(" ") + "\n";
+  }
+  return texto.trim();
+}
+
 function extrairJSON(raw) {
   try { return JSON.parse(raw.trim()); } catch(e1) {}
   var limpo = raw.replace(/```json/g,"").replace(/```/g,"").trim();
   try { return JSON.parse(limpo); } catch(e2) {}
-  var m1 = limpo.match(/\{[\s\S]*\}/);
-  if (m1) { try { return JSON.parse(m1[0]); } catch(e3) {} }
   var m2 = limpo.match(/\[[\s\S]*\]/);
   if (m2) { try { return JSON.parse(m2[0]); } catch(e4) {} }
-  throw new Error("Nao foi possivel extrair JSON da resposta: " + raw.slice(0,200));
+  var m1 = limpo.match(/\{[\s\S]*\}/);
+  if (m1) { try { return JSON.parse(m1[0]); } catch(e3) {} }
+  throw new Error("Não foi possível interpretar a resposta da IA: " + raw.slice(0,200));
 }
 
-async function extrairDespacho(file) {
-  var prompt = 'Leia este despacho ministerial e extraia: 1) numero do procedimento (PA, IP, NF, IC etc), 2) tipo (PA/IP/NF/IC/PP/TCO), 3) TODOS os orgaos/pessoas para quem foi determinado oficiar, notificar ou requisitar (ex: Conselho Tutelar, CREAS, Policia Civil, Prefeitura, nome de pessoa), 4) resumo do que foi determinado. Retorne SOMENTE este JSON sem explicacoes nem markdown: {"numProc":"numero","tipo":"PA","destinatarios":["orgao1","orgao2"],"teor":"resumo"}. Se nao encontrar destinatarios claros, coloque ["Destinatario a identificar"].';
-  var raw = "";
-  try {
-    if (file.name.match(/\.pdf$/i)) {
-      var b64 = await lerArquivoBase64(file);
-      raw = await callClaudeComPDF(b64, prompt);
+var PROMPT_EXTRACAO =
+"Você é assistente de uma Promotoria de Justiça do Ministério Público da Bahia. " +
+"Recebe um ou mais arquivos que podem ser DESPACHOS isolados e/ou PROCEDIMENTOS ADMINISTRATIVOS INTEIROS (com vários despachos ao longo das páginas).\n\n" +
+"Tarefa: AGRUPE o conteúdo por NÚMERO DE PROCEDIMENTO (ex.: 201.9.551584/2025, 003.9.000123/2025). Para CADA procedimento:\n" +
+"1) Localize o ÚLTIMO despacho (o mais recente do Promotor). Se ele apenas remeter a despacho anterior (ex.: \"reitere-se\", \"cumpra-se o despacho anterior\", \"conforme despacho de fls. X\", \"renove-se\"), SIGA a cadeia de remissões e considere os comandos efetivamente determinados a cumprir.\n" +
+"2) Liste TODOS os destinatários a quem se determinou OFICIAR, NOTIFICAR ou REQUISITAR.\n" +
+"3) Para cada destinatário, extraia o que estiver disponível: orgao (instituição), vocativo de tratamento (ex.: \"A Sua Excelência o Senhor\", \"A Sua Senhoria o Senhor\", \"Ao Ilustre Conselho Tutelar\"), nomeAutoridade (nome da pessoa, se houver), endereco, cepCidade, email.\n" +
+"4) Gere um ASSUNTO sintético (poucas palavras, ex.: \"Solicita informações.\", \"Requisita documentos.\").\n" +
+"5) Gere o TEOR: frase objetiva que completa \"sirvo-me do presente para solicitar ___\" (ex.: \"informações sobre eventual registro de ocorrência relacionado aos fatos\"). Não inclua o prazo.\n" +
+"6) tipo: PA, IP, NF, IC, PP ou TCO.\n\n" +
+"Responda SOMENTE com um array JSON, sem markdown e sem explicações, no formato:\n" +
+"[{\"numProc\":\"...\",\"tipo\":\"PA\",\"assunto\":\"...\",\"teor\":\"...\",\"destinatarios\":[{\"orgao\":\"...\",\"vocativo\":\"...\",\"nomeAutoridade\":\"\",\"endereco\":\"\",\"cepCidade\":\"\",\"email\":\"\"}]}]\n" +
+"Se não houver destinatário claro em um procedimento, use \"destinatarios\":[{\"orgao\":\"Destinatário a identificar\"}].";
+
+// Envia todos os arquivos numa unica chamada e retorna o array de procedimentos.
+async function extrairProcedimentos(files, onProgresso) {
+  var content = [];
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    if (onProgresso) onProgresso("Lendo " + f.name + " (" + (i+1) + "/" + files.length + ")");
+    var texto = "";
+    if (/\.pdf$/i.test(f.name)) {
+      try { texto = await extrairTextoPDF(f); } catch (e) { texto = ""; }
+      if (texto && texto.replace(/\s/g, "").length > 40) {
+        content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + texto.slice(0, 80000) });
+      } else {
+        // PDF escaneado/sem texto -> envia como documento (imagem)
+        var b64 = await lerArquivoBase64(f);
+        content.push({ type:"document", source:{ type:"base64", media_type:"application/pdf", data:b64 } });
+        content.push({ type:"text", text:"(o arquivo PDF acima chama-se: " + f.name + ")" });
+      }
     } else {
-      var texto = await lerArquivoTexto(file);
-      raw = await callClaude(prompt + "\n\nTEXTO:\n" + texto.slice(0, 6000));
+      var t = await lerArquivoTexto(f);
+      content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + t.slice(0, 80000) });
     }
-    return extrairJSON(raw);
-  } catch(e) {
-    var numDoNome = file.name.replace(/\.pdf$/i,"").replace(/\s*\(\d+\)$/,"").trim();
-    return { numProc: numDoNome || "Sem numero", tipo: "PA", destinatarios: ["Destinatario a identificar"], teor: "Verificar manualmente - processamento automatico falhou", _falhou: true };
   }
+  content.push({ type:"text", text: PROMPT_EXTRACAO });
+  if (onProgresso) onProgresso("IA analisando os documentos...");
+  var raw = await anthropicMessages({ max_tokens: 8000, content: content });
+  var arr = extrairJSON(raw);
+  if (!Array.isArray(arr)) arr = [arr];
+  return arr;
 }
 
-async function extrairPessoaFisica(arquivoDespacho, arquivoProcedimento) {
-  var prompt = "Identifique pessoas fisicas destinatarias de diligencias neste despacho e procedimento. Retorne SOMENTE JSON array sem markdown:\n[{\"nome\":\"nome completo\",\"email\":\"email ou null\",\"cpf\":\"cpf ou null\",\"telefone\":\"tel ou null\",\"qualificacao\":\"denunciante/testemunha/investigado\",\"tratamento\":\"A Senhor(a) [nome]\"}]\nRetorne [] se nao encontrar ninguem.";
-  var raw;
-  if (arquivoProcedimento && arquivoProcedimento.name.match(/\.pdf$/i)) {
-    var b64 = await lerArquivoBase64(arquivoProcedimento);
-    raw = await callClaudeComPDF(b64, prompt);
-  } else if (arquivoDespacho && arquivoDespacho.name.match(/\.pdf$/i)) {
-    var b64b = await lerArquivoBase64(arquivoDespacho);
-    raw = await callClaudeComPDF(b64b, prompt);
-  } else {
-    var texto = arquivoProcedimento ? await lerArquivoTexto(arquivoProcedimento) : "";
-    raw = await callClaude(prompt + "\n\nPROCEDIMENTO:\n" + texto.slice(0,6000));
-  }
-  return extrairJSON(raw);
-}
-
-// Mantido para compatibilidade
-function lerArquivo(file) {
-  return lerArquivoTexto(file);
-}
-
-// Estilos
+// Estilos UI
 var C = {
   azul: "#0a2440",
   verde: "#1a7a3a",
@@ -316,16 +361,17 @@ function btnOut(extra) {
   return Object.assign({ background:"white", border:"1px solid #ddd", padding:"9px 14px", borderRadius:8, fontSize:13, cursor:"pointer" }, extra || {});
 }
 
-// Modal generico
 function Modal(props) {
   return (
     React.createElement("div", { style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:16 } },
-      React.createElement("div", { style:{ background:"white", borderRadius:12, padding:24, width:"100%", maxWidth:460, maxHeight:"90vh", overflowY:"auto" } },
+      React.createElement("div", { style:{ background:"white", borderRadius:12, padding:24, width:"100%", maxWidth:480, maxHeight:"90vh", overflowY:"auto" } },
         props.children
       )
     )
   );
 }
+
+function normChave(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g,"").trim(); }
 
 export default function App() {
   var [screen, setScreen] = useState("loading");
@@ -334,16 +380,18 @@ export default function App() {
   var [servDB, setServDB] = useState([]);
   var [servAtual, setServAtual] = useState(null);
   var [step, setStep] = useState("config");
-  var [cfg, setCfg] = useState({ numInicial:"", data: new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}) });
+  var [cfg, setCfg] = useState({ numInicial:"", ano: String(new Date().getFullYear()), data: new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}) });
   var [fila, setFila] = useState([]);
+  var [procs, setProcs] = useState([]);
   var [pendentes, setPendentes] = useState([]);
   var [resultado, setResultado] = useState(null);
   var [progresso, setProgresso] = useState({ msg:"", atual:0, total:0 });
+  var [erroProc, setErroProc] = useState("");
   var [cascaBytes, setCascaBytes] = useState(null);
   var [modalDest, setModalDest] = useState(null);
   var [modalServ, setModalServ] = useState(null);
   var [modalManual, setModalManual] = useState(null);
-  var [settings, setSettings] = useState({ key:"", model:"claude-sonnet-4-6", usarIA:true });
+  var [settings, setSettings] = useState({ key:"", model:"claude-sonnet-4-6", usarIA:true, promotor:"Rui César Farias dos Santos Júnior" });
   var [showSettings, setShowSettings] = useState(false);
   var fileRef = useRef();
 
@@ -353,14 +401,13 @@ export default function App() {
       var dSaved = await sGet("mpba:dest");
       var sSaved = await sGet("mpba:serv");
       var cSaved = await sGet("mpba:comarca");
-      var dList = dSaved || DEST_INICIAIS;
-      var sList = sSaved || SERV_INICIAIS;
+      var dList = (dSaved || DEST_INICIAIS).map(migrarDest);
+      var sList = (sSaved || SERV_INICIAIS).map(function(s){ return Object.assign({ cargo:"" }, s); });
       var c = cSaved || "prado";
       setDestDB(dList);
       setServDB(sList);
       setComarca(c);
       setServAtual(sList.find(function(s) { return s.comarca === c; }) || sList[0] || null);
-      // Pre-carrega a casca timbrada (nao bloqueia se falhar; tenta de novo na geracao)
       try { var bytes = await carregarCasca(); setCascaBytes(bytes); } catch(e) { console.warn(e); }
       setScreen("main");
     })();
@@ -373,15 +420,31 @@ export default function App() {
     setComarca(c);
     sSet("mpba:comarca", c);
     setServAtual(servDB.find(function(s) { return s.comarca === c; }) || servDB[0] || null);
-    setCfg(function(p) { return Object.assign({}, p, { email: COMARCAS[c].email }); });
   }
 
-  function resolverDest(texto) {
-    var lower = String(texto).toLowerCase();
+  // Resolve um destinatario (objeto da IA {orgao,...} ou string) contra o banco da comarca.
+  function resolverDest(item) {
+    var texto = typeof item === "string" ? item : (item.orgao || item.nome || "");
+    var lower = normChave(texto);
     var lista = destDB.filter(function(d) { return d.comarca === comarca || d.comarca === "todos"; });
+    var achado = null;
     for (var i = 0; i < lista.length; i++) {
       var d = lista[i];
-      if (lower.indexOf(d.chave) !== -1 || lower.indexOf(d.nome.toLowerCase()) !== -1) return Object.assign({}, d);
+      if (lower && (lower.indexOf(normChave(d.chave)) !== -1 || normChave(d.nome).indexOf(lower) !== -1 || lower.indexOf(normChave(d.nome)) !== -1)) { achado = d; break; }
+    }
+    var ia = typeof item === "object" ? item : {};
+    if (achado) {
+      // mescla: prefere dado do banco; complementa com o que a IA achou
+      return {
+        id: achado.id,
+        chave: achado.chave,
+        nome: achado.nome,
+        vocativo: achado.vocativo || ia.vocativo || "",
+        nomeAutoridade: achado.nomeAutoridade || ia.nomeAutoridade || "",
+        endereco: achado.endereco || ia.endereco || "",
+        cepCidade: achado.cepCidade || ia.cepCidade || "",
+        email: achado.email || ia.email || "",
+      };
     }
     return null;
   }
@@ -391,83 +454,106 @@ export default function App() {
     for (var i = 0; i < files.length; i++) {
       var f = files[i];
       if (!f.name.match(/\.(pdf|txt)$/i)) continue;
-      novos.push({ id:uid(), nome:f.name, file:f, status:"pendente", dados:null, destResolvidos:[], destNaoResolvidos:[], erro:"", manual:null });
+      novos.push({ id:uid(), nome:f.name, file:f, manual:null });
     }
     setFila(function(p) { return p.concat(novos); });
     setStep("fila");
   }, []);
 
-  async function processarFila() {
-    if (!cfg.numInicial) { alert("Informe o numero inicial do oficio."); return; }
-    if (!servAtual) { alert("Selecione um servidor."); return; }
-    if (settings.usarIA && !settings.key) {
-      var ok = confirm("Nenhuma chave da API Anthropic foi configurada, entao a extracao automatica nao vai funcionar. Os despachos sem dados preenchidos manualmente entrarao na etapa de revisao manual. Deseja continuar?");
-      if (!ok) { setShowSettings(true); return; }
-    }
-    setStep("processando");
-    var processados = fila.slice();
+  // Aplica a lista de procedimentos (brutos) -> resolve destinatarios -> separa pendentes
+  function aplicarProcedimentos(brutos) {
+    var lista = [];
     var naoResolvidosGlobal = [];
-    for (var i = 0; i < processados.length; i++) {
-      var d = processados[i];
-      setProgresso({ msg: "Analisando: " + d.nome, atual: i+1, total: processados.length });
-      try {
-        var dados;
-        if (d.manual && d.manual.numProc) {
-          // Dados preenchidos manualmente tem prioridade sobre a IA
-          dados = { numProc: d.manual.numProc, tipo: d.manual.tipo || "PA", teor: d.manual.teor || "", destinatarios: d.manual.destinatarios || [] };
-        } else if (settings.usarIA && settings.key) {
-          dados = await extrairDespacho(d.file);
-        } else {
-          // Sem IA e sem manual: estrutura minima a partir do nome -> cai na revisao manual
-          var numDoNome = d.nome.replace(/\.(pdf|txt)$/i,"").replace(/\s*\(\d+\)$/,"").trim();
-          dados = { numProc: numDoNome || "Sem numero", tipo: "PA", destinatarios: ["Destinatario a identificar"], teor: "Preencher manualmente" };
+    brutos.forEach(function(b, idx) {
+      var procId = "proc_" + idx;
+      var resolvidos = [];
+      var naoResolvidos = [];
+      (b.destinatarios || []).forEach(function(dst) {
+        var r = resolverDest(dst);
+        if (r) resolvidos.push(r);
+        else {
+          var ia = typeof dst === "object" ? dst : { orgao: String(dst) };
+          naoResolvidos.push({ id:uid(), procId:procId, textoOriginal: ia.orgao || "Destinatário", ia:ia });
         }
-        var resolvidos = [];
-        var naoResolvidos = [];
-        var dests = dados.destinatarios || [];
-        for (var j = 0; j < dests.length; j++) {
-          var r = resolverDest(dests[j]);
-          if (r) resolvidos.push(r);
-          else naoResolvidos.push({ id:uid(), textoOriginal:dests[j], arquivoDespacho:d.nome, despachoFile:d.file });
-        }
-        processados[i] = Object.assign({}, d, { dados:dados, destResolvidos:resolvidos, destNaoResolvidos:naoResolvidos, status:"ok" });
-        naoResolvidosGlobal = naoResolvidosGlobal.concat(naoResolvidos);
-      } catch(e) {
-        processados[i] = Object.assign({}, d, { status:"erro", erro: String(e) });
-      }
-    }
-    setFila(processados);
+      });
+      lista.push({ procId:procId, numProc:b.numProc || "Sem número", tipo:b.tipo || "PA", assunto:b.assunto || "", teor:b.teor || "", destResolvidos:resolvidos });
+      naoResolvidos.forEach(function(nr){ naoResolvidosGlobal.push(nr); });
+    });
+    setProcs(lista);
     if (naoResolvidosGlobal.length > 0) {
       setPendentes(naoResolvidosGlobal);
       setStep("resolucao");
     } else {
-      finalizarProcessamento(processados);
+      finalizar(lista);
     }
   }
 
-  function finalizarProcessamento(processados) {
-    var numInicial = parseInt(cfg.numInicial);
-    var ano = new Date().getFullYear();
+  async function processarFila() {
+    if (!cfg.numInicial) { alert("Informe o número inicial do ofício."); return; }
+    if (!servAtual) { alert("Selecione um servidor responsável."); return; }
+    setErroProc("");
+    setStep("processando");
+
+    // 1) procedimentos preenchidos manualmente
+    var manualProcs = [];
+    fila.forEach(function(f) {
+      if (f.manual && f.manual.numProc) {
+        manualProcs.push({ numProc:f.manual.numProc, tipo:f.manual.tipo || "PA", assunto:f.manual.assunto || "", teor:f.manual.teor || "", destinatarios:(f.manual.destinatarios || []) });
+      }
+    });
+    var arquivosIA = fila.filter(function(f){ return !(f.manual && f.manual.numProc); }).map(function(f){ return f.file; });
+
+    var brutos = manualProcs.slice();
+    try {
+      if (arquivosIA.length > 0) {
+        if (settings.usarIA && settings.key) {
+          setProgresso({ msg:"Preparando documentos...", atual:0, total:0 });
+          var extraidos = await extrairProcedimentos(arquivosIA, function(msg){ setProgresso({ msg:msg, atual:0, total:0 }); });
+          brutos = brutos.concat(extraidos);
+        } else {
+          // sem IA: cria procedimentos vazios a partir do nome do arquivo (para preenchimento manual)
+          arquivosIA.forEach(function(f) {
+            var numDoNome = f.name.replace(/\.(pdf|txt)$/i,"").replace(/\s*\(\d+\)$/,"").trim();
+            brutos.push({ numProc:numDoNome || "Sem número", tipo:"PA", assunto:"", teor:"", destinatarios:[{ orgao:"Destinatário a identificar" }] });
+          });
+        }
+      }
+      if (brutos.length === 0) { setErroProc("Nenhum procedimento foi identificado."); setStep("fila"); return; }
+      aplicarProcedimentos(brutos);
+    } catch (e) {
+      setErroProc(String(e && e.message ? e.message : e));
+      setStep("fila");
+    }
+  }
+
+  // Consolida por destinatario (juntada) e gera grupos/oficios + certidoes
+  function finalizar(listaProcs) {
+    var numInicial = parseInt(cfg.numInicial, 10);
+    var ano = cfg.ano || String(new Date().getFullYear());
     var porDest = {};
-    processados.filter(function(d) { return d.status === "ok"; }).forEach(function(d) {
-      d.destResolvidos.forEach(function(dest) {
-        var key = dest.id || dest.chave || dest.nome;
-        if (!porDest[key]) porDest[key] = { dest:dest, itens:[] };
-        porDest[key].itens.push({ numProc:d.dados.numProc, tipo:d.dados.tipo, teor:d.dados.teor, arquivo:d.nome });
+    listaProcs.forEach(function(p) {
+      p.destResolvidos.forEach(function(dest) {
+        var key = dest.id || normChave(dest.nome);
+        if (!porDest[key]) porDest[key] = { dest:dest, itens:[], assuntos:[] };
+        porDest[key].itens.push({ numProc:p.numProc, tipo:p.tipo, teor:p.teor });
+        if (p.assunto && porDest[key].assuntos.indexOf(p.assunto) === -1) porDest[key].assuntos.push(p.assunto);
       });
     });
-    var grupos = Object.values(porDest);
-    grupos.forEach(function(g, i) { g.numOficio = String(numInicial + i).padStart(3,"0") + "/" + ano; });
+    var grupos = Object.keys(porDest).map(function(k){ return porDest[k]; });
+    grupos.forEach(function(g, i) {
+      g.numOficio = String(numInicial + i).padStart(3,"0") + "." + ano;
+      g.assunto = g.assuntos.join("; ");
+    });
+    // certidoes por procedimento
     var certsPorProc = {};
-    processados.filter(function(d) { return d.status === "ok"; }).forEach(function(d) {
-      var key = d.dados.numProc;
-      if (!certsPorProc[key]) certsPorProc[key] = { numProc:key, tipo:d.dados.tipo, exps:[] };
-      d.destResolvidos.forEach(function(dest) {
-        var g = grupos.find(function(g) { return (g.dest.id||g.dest.chave||g.dest.nome) === (dest.id||dest.chave||dest.nome); });
-        if (g) certsPorProc[key].exps.push({ nome:dest.nome, numOficio:g.numOficio });
+    listaProcs.forEach(function(p) {
+      if (!certsPorProc[p.numProc]) certsPorProc[p.numProc] = { numProc:p.numProc, tipo:p.tipo, exps:[] };
+      p.destResolvidos.forEach(function(dest) {
+        var g = grupos.find(function(g){ return (g.dest.id || normChave(g.dest.nome)) === (dest.id || normChave(dest.nome)); });
+        if (g) certsPorProc[p.numProc].exps.push({ nome:dest.nome, numOficio:g.numOficio });
       });
     });
-    setResultado({ grupos:grupos, certs:Object.values(certsPorProc) });
+    setResultado({ grupos:grupos, certs:Object.keys(certsPorProc).map(function(k){ return certsPorProc[k]; }) });
     setStep("resultado");
   }
 
@@ -475,39 +561,43 @@ export default function App() {
     var bytes = cascaBytes;
     if (!bytes) { try { bytes = await carregarCasca(); if (bytes) setCascaBytes(bytes); } catch(e) {} }
     var comarcaData = COMARCAS[comarca];
-    var cidade = comarcaData.label.split("/")[0];
+    var cidade = comarcaData.cidade;
     var promotoria = comarcaData.promotoria;
+    var emailResp = comarcaData.email;
+    var promotor = settings.promotor || "Rui César Farias dos Santos Júnior";
+    var servNome = servAtual.nome;
+    var servCargo = servAtual.cargo || "Servidor(a)";
     var arquivos = [];
     var grupos = resultado.grupos;
     var certs = resultado.certs;
     for (var i = 0; i < grupos.length; i++) {
       var g = grupos[i];
-      setProgresso({ msg:"Gerando oficio " + (i+1) + "/" + grupos.length, atual:i+1, total:grupos.length+certs.length });
-      var nomeSafe = g.dest.nome.replace(/[^a-zA-Z0-9]/g,"_").slice(0,25);
-      var nomeDocx = "Oficio_" + g.numOficio.replace("/","_") + "_" + nomeSafe + ".docx";
+      setProgresso({ msg:"Gerando ofício " + (i+1) + "/" + grupos.length, atual:i+1, total:grupos.length+certs.length });
+      var nomeSafe = g.dest.nome.replace(/[^a-zA-Z0-9]/g,"_").slice(0,28);
+      var nomeDocx = "Oficio_" + g.numOficio.replace(/[^0-9.]/g,"_") + "_" + nomeSafe + ".docx";
       if (bytes) {
         try {
-          var blob = await montarDocx(gerarBodyOficio({ destinatario:g.dest, itens:g.itens, numOficio:g.numOficio, data:cfg.data, promotoria:promotoria, cidade:cidade }), bytes);
+          var blob = await montarDocx(gerarBodyOficio({ dest:g.dest, itens:g.itens, numOficio:g.numOficio, assunto:g.assunto, promotor:promotor, promotoriaCidade:cidade, emailResp:emailResp, servNome:servNome, servCargo:servCargo }), bytes);
           arquivos.push({ nome:nomeDocx, blob:blob, tipo:"oficio" });
         } catch(e) { console.error(e); }
       }
-      var emlData = gerarEml({ dest:g.dest, numOficio:g.numOficio, promotoriaEmail:COMARCAS[comarca].email, data:cfg.data, promotoria:promotoria });
-      arquivos.push({ nome:"Email_" + g.numOficio.replace("/","_") + "_" + nomeSafe + ".eml", blob:new Blob([emlData.eml],{type:"message/rfc822"}), tipo:"eml" });
+      var emlData = gerarEml({ dest:g.dest, numOficio:g.numOficio, promotoriaEmail:emailResp, promotoria:promotoria, servNome:servNome, servCargo:servCargo });
+      arquivos.push({ nome:"Email_" + g.numOficio.replace(/[^0-9.]/g,"_") + "_" + nomeSafe + ".eml", blob:new Blob([emlData.eml],{type:"message/rfc822"}), tipo:"eml" });
     }
     for (var k = 0; k < certs.length; k++) {
       var cert = certs[k];
-      setProgresso({ msg:"Gerando certidao " + (k+1) + "/" + certs.length, atual:grupos.length+k+1, total:grupos.length+certs.length });
+      setProgresso({ msg:"Gerando certidão " + (k+1) + "/" + certs.length, atual:grupos.length+k+1, total:grupos.length+certs.length });
       if (bytes) {
         try {
-          var blobC = await montarDocx(gerarBodyCertidao({ numProc:cert.numProc, tipo:cert.tipo, expedicoes:cert.exps, data:cfg.data, nomeServ:servAtual.nome, matServ:servAtual.matricula, promotoria:promotoria, cidade:cidade }), bytes);
+          var blobC = await montarDocx(gerarBodyCertidao({ numProc:cert.numProc, tipo:cert.tipo, expedicoes:cert.exps, data:cfg.data, nomeServ:servNome, cargoServ:servCargo, matServ:servAtual.matricula, promotoria:promotoria, cidade:cidade }), bytes);
           var nomeSafeCert = cert.numProc.replace(/[^a-zA-Z0-9]/g,"_").slice(0,40);
           arquivos.push({ nome:"Certidao_" + nomeSafeCert + ".docx", blob:blobC, tipo:"certidao" });
         } catch(e) {}
       }
     }
-    var ck = "CHECKLIST - " + COMARCAS[comarca].label + " - " + cfg.data + "\nServidor: " + servAtual.nome + " (Mat. " + servAtual.matricula + ")\n" + "=".repeat(50) + "\n\n";
+    var ck = "CHECKLIST - " + comarcaData.label + " - " + cfg.data + "\nServidor: " + servNome + " (" + servCargo + (servAtual.matricula && servAtual.matricula !== "--" ? ", Mat. " + servAtual.matricula : "") + ")\n" + "=".repeat(50) + "\n\n";
     grupos.forEach(function(g, i) {
-      ck += (i+1) + ". Oficio no " + g.numOficio + " -> " + g.dest.nome + "\n   Email: " + (g.dest.email || "CADASTRAR") + "\n   Anexar: docx + " + g.itens.map(function(x){return x.arquivo;}).join(", ") + "\n\n";
+      ck += (i+1) + ". Ofício nº " + g.numOficio + " -> " + g.dest.nome + "\n   Email: " + (g.dest.email || "CADASTRAR") + "\n   Referência: " + g.itens.map(function(x){return x.numProc;}).join("; ") + "\n\n";
     });
     arquivos.push({ nome:"0_CHECKLIST.txt", blob:new Blob([ck],{type:"text/plain"}), tipo:"checklist" });
     return arquivos;
@@ -515,7 +605,7 @@ export default function App() {
 
   async function baixarZip() {
     if (!resultado) return;
-    if (!cascaBytes) { alert("O modelo timbrado ainda nao foi carregado. Aguarde alguns segundos e tente novamente."); return; }
+    if (!cascaBytes) { alert("O modelo timbrado ainda não foi carregado. Aguarde alguns segundos e tente novamente."); return; }
     setProgresso({ msg:"Preparando...", atual:0, total:1 });
     var zip = new JSZip();
     var p1 = zip.folder("1_oficios"), p2 = zip.folder("2_certidoes"), p3 = zip.folder("3_emails_outlook");
@@ -546,7 +636,7 @@ export default function App() {
   var settingsModal = showSettings && React.createElement(ModalSettings, {
     settings: settings,
     onClose: function(){ setShowSettings(false); },
-    onSave: function(s){ salvarSettings(s); setSettings({ key:s.key, model:s.model, usarIA:s.usarIA }); setShowSettings(false); }
+    onSave: function(s){ salvarSettings(s); setSettings({ key:s.key, model:s.model, usarIA:s.usarIA, promotor:s.promotor }); setShowSettings(false); }
   });
 
   // Tela banco destinatarios
@@ -557,16 +647,16 @@ export default function App() {
       settingsModal,
       React.createElement("div", { style:{ maxWidth:820, margin:"0 auto", padding:"20px 14px" } },
         React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 } },
-          React.createElement("h2", { style:{ margin:0, color:C.azul, fontSize:16 } }, "Banco de Destinatarios - " + COMARCAS[comarca].label),
-          React.createElement("button", { style:btn(C.verde), onClick:function() { setModalDest({ dest:{ id:uid(), comarca:comarca, chave:"", nome:"", email:"", tratamento:"", tipo:"institucional" }, isNew:true }); } }, "+ Novo")
+          React.createElement("h2", { style:{ margin:0, color:C.azul, fontSize:16 } }, "Banco de Destinatários - " + COMARCAS[comarca].label),
+          React.createElement("button", { style:btn(C.verde), onClick:function() { setModalDest({ dest:{ id:uid(), comarca:comarca, chave:"", nome:"", vocativo:"", nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" }, isNew:true }); } }, "+ Novo")
         ),
-        filtrados.length === 0 && React.createElement("div", { style:Object.assign({}, C.card, { textAlign:"center", color:"#888", padding:32 }) }, "Nenhum destinatario cadastrado para " + COMARCAS[comarca].label + ". Clique em + Novo para comecar."),
+        filtrados.length === 0 && React.createElement("div", { style:Object.assign({}, C.card, { textAlign:"center", color:"#888", padding:32 }) }, "Nenhum destinatário cadastrado para " + COMARCAS[comarca].label + "."),
         filtrados.map(function(d) {
           return React.createElement("div", { key:d.id, style:Object.assign({}, C.card, { display:"flex", alignItems:"center", gap:10, padding:"12px 16px" }) },
             React.createElement("div", { style:{ flex:1 } },
               React.createElement("div", { style:{ fontSize:14, fontWeight:"bold", color:"#222" } }, d.nome),
-              React.createElement("div", { style:{ fontSize:12, color: d.email ? C.verde : "#c66", marginTop:2 } }, d.email || "Email nao cadastrado"),
-              d.tipo === "pessoa_fisica" && d.cpf && React.createElement("div", { style:{ fontSize:11, color:"#888" } }, "CPF: " + d.cpf)
+              React.createElement("div", { style:{ fontSize:12, color: d.email ? C.verde : "#c66", marginTop:2 } }, d.email || "Email não cadastrado"),
+              (d.endereco || d.cepCidade) && React.createElement("div", { style:{ fontSize:11, color:"#888" } }, [d.endereco, d.cepCidade].filter(Boolean).join(" - "))
             ),
             React.createElement("span", { style:{ background:"#e8f0fe", color:C.azul, padding:"2px 8px", borderRadius:10, fontSize:11 } }, d.chave),
             React.createElement("button", { style:btn(C.azul, { padding:"4px 10px", fontSize:11 }), onClick:function() { setModalDest({ dest:Object.assign({},d), isNew:false }); } }, "Editar"),
@@ -585,8 +675,8 @@ export default function App() {
       settingsModal,
       React.createElement("div", { style:{ maxWidth:820, margin:"0 auto", padding:"20px 14px" } },
         React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 } },
-          React.createElement("h2", { style:{ margin:0, color:C.azul, fontSize:16 } }, "Servidores Responsaveis"),
-          React.createElement("button", { style:btn(C.verde), onClick:function(){ setModalServ({ srv:{ id:uid(), nome:"", matricula:"", comarca:comarca }, isNew:true }); } }, "+ Novo")
+          React.createElement("h2", { style:{ margin:0, color:C.azul, fontSize:16 } }, "Servidores Responsáveis"),
+          React.createElement("button", { style:btn(C.verde), onClick:function(){ setModalServ({ srv:{ id:uid(), nome:"", matricula:"", cargo:"Assistente Técnico Administrativo", comarca:comarca }, isNew:true }); } }, "+ Novo")
         ),
         React.createElement("div", { style:C.card },
           servDB.length === 0 && React.createElement("div", { style:{ textAlign:"center", color:"#888", padding:24 } }, "Nenhum servidor cadastrado."),
@@ -594,7 +684,7 @@ export default function App() {
             return React.createElement("div", { key:s.id, style:{ display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:"1px solid #f5f5f5" } },
               React.createElement("div", { style:{ flex:1 } },
                 React.createElement("div", { style:{ fontSize:14, fontWeight:"bold" } }, s.nome),
-                React.createElement("div", { style:{ fontSize:12, color:"#888" } }, "Mat. " + s.matricula + " - " + (COMARCAS[s.comarca] ? COMARCAS[s.comarca].label : s.comarca))
+                React.createElement("div", { style:{ fontSize:12, color:"#888" } }, (s.cargo || "Servidor(a)") + " - Mat. " + s.matricula + " - " + (COMARCAS[s.comarca] ? COMARCAS[s.comarca].label : s.comarca))
               ),
               servAtual && servAtual.id === s.id && React.createElement("span", { style:{ background:"#dff0d8", color:C.verde, padding:"2px 8px", borderRadius:10, fontSize:11 } }, "Ativo"),
               React.createElement("button", { style:btn(C.azul, { padding:"4px 10px", fontSize:11 }), onClick:function(){ setServAtual(s); sSet("mpba:comarca", s.comarca); setComarca(s.comarca); } }, "Selecionar"),
@@ -608,85 +698,86 @@ export default function App() {
     );
   }
 
-  // Tela principal
-  var erros = fila.filter(function(d){ return d.status==="erro"||d.status==="sem_destinatario"; });
   var steps = ["config","fila","processando","resultado"];
-  var stepLabels = ["Configurar","Fila","Processar","Resultado"];
+  var stepLabels = ["Configurar","Arquivos","Processar","Resultado"];
 
   return React.createElement("div", { style:{ fontFamily:"Arial", minHeight:"100vh", background:C.cinza } },
     React.createElement(Header, { screen, setScreen, comarca, mudarComarca, steps, stepLabels, step, onSettings:function(){setShowSettings(true);} }),
     settingsModal,
     React.createElement("div", { style:{ maxWidth:820, margin:"0 auto", padding:"20px 14px" } },
 
-      // Aviso casca/chave
       !cascaBytes && step === "config" && React.createElement("div", { style:{ background:"#fff3cd", border:"1px solid #ffe08a", borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:12, color:"#7a5c00" } }, "Carregando o modelo timbrado oficial..."),
       settings.usarIA && !settings.key && step === "config" && React.createElement("div", { style:{ background:"#e8f0fe", border:"1px solid #b9d4ff", borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:12, color:C.azul, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10 } },
-        React.createElement("span", null, "Extracao por IA ativada, mas sem chave da API Anthropic configurada. Sem ela, os despachos cairao na revisao manual."),
-        React.createElement("button", { style:btn(C.azul,{padding:"5px 10px",fontSize:11}), onClick:function(){setShowSettings(true);} }, "Configurar chave")
+        React.createElement("span", null, "Extração por IA ativada, mas sem chave da API. Configure a chave ou use o preenchimento manual."),
+        React.createElement("button", { style:btn(C.azul,{padding:"5px 10px",fontSize:11}), onClick:function(){setShowSettings(true);} }, "Configurar")
       ),
 
       // CONFIG
       step === "config" && React.createElement("div", { style:C.card },
-        React.createElement("h2", { style:{ margin:"0 0 18px", color:C.azul, fontSize:16 } }, "Configuracoes da Expedicao"),
+        React.createElement("h2", { style:{ margin:"0 0 18px", color:C.azul, fontSize:16 } }, "Configurações da Expedição"),
         React.createElement("div", { style:{ marginBottom:16 } },
           React.createElement("label", { style:C.label }, "Comarca"),
           React.createElement("div", { style:{ display:"flex", gap:8 } },
-            Object.entries(COMARCAS).map(function(entry) {
-              var k = entry[0]; var v = entry[1];
+            Object.keys(COMARCAS).map(function(k) {
+              var v = COMARCAS[k];
               return React.createElement("button", { key:k, onClick:function(){mudarComarca(k);}, style:{ flex:1, padding:"9px 6px", borderRadius:8, border:"2px solid " + (comarca===k?C.azul:"#ddd"), background:comarca===k?C.azul:"white", color:comarca===k?"white":"#333", cursor:"pointer", fontSize:12, fontWeight:comarca===k?"bold":"normal" } }, v.label);
             })
           )
         ),
         React.createElement("div", { style:{ background:"#f8f9ff", borderRadius:8, padding:12, marginBottom:16, fontSize:13 } },
           React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center" } },
-            React.createElement("span", null, "Servidor: ", React.createElement("strong", null, servAtual ? servAtual.nome + " (Mat. " + servAtual.matricula + ")" : "Nenhum selecionado")),
+            React.createElement("span", null, "Servidor: ", React.createElement("strong", null, servAtual ? servAtual.nome + " (" + (servAtual.cargo||"Servidor(a)") + ")" : "Nenhum selecionado")),
             React.createElement("button", { style:btn(C.azul, { padding:"4px 10px", fontSize:11 }), onClick:function(){setScreen("servidores");} }, "Gerenciar")
           ),
+          React.createElement("div", { style:{ marginTop:4 } }, "Promotor: ", React.createElement("strong", null, settings.promotor)),
           React.createElement("div", { style:{ marginTop:4 } }, "Promotoria: ", React.createElement("strong", null, COMARCAS[comarca].promotoria))
         ),
-        React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 } },
-          React.createElement("div", null, React.createElement("label", { style:C.label }, "Numero inicial do oficio *"), React.createElement("input", { style:C.input, value:cfg.numInicial, onChange:function(e){setCfg(function(p){return Object.assign({},p,{numInicial:e.target.value});});}, placeholder:"Ex: 145" })),
-          React.createElement("div", null, React.createElement("label", { style:C.label }, "Data de expedicao"), React.createElement("input", { style:C.input, value:cfg.data, onChange:function(e){setCfg(function(p){return Object.assign({},p,{data:e.target.value});});} }))
+        React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 } },
+          React.createElement("div", null, React.createElement("label", { style:C.label }, "Nº inicial do ofício *"), React.createElement("input", { style:C.input, value:cfg.numInicial, onChange:function(e){setCfg(function(p){return Object.assign({},p,{numInicial:e.target.value});});}, placeholder:"Ex: 95" })),
+          React.createElement("div", null, React.createElement("label", { style:C.label }, "Ano"), React.createElement("input", { style:C.input, value:cfg.ano, onChange:function(e){setCfg(function(p){return Object.assign({},p,{ano:e.target.value});});} })),
+          React.createElement("div", null, React.createElement("label", { style:C.label }, "Data (certidão)"), React.createElement("input", { style:C.input, value:cfg.data, onChange:function(e){setCfg(function(p){return Object.assign({},p,{data:e.target.value});});} }))
         ),
+        React.createElement("div", { style:{ fontSize:11, color:"#888", marginTop:6 } }, "O ofício sai numerado como, ex.: 095." + cfg.ano + " e datado como \"data da assinatura eletrônica\"."),
         React.createElement("div", { style:{ marginTop:16 } },
-          React.createElement("button", { style:btn(), onClick:function(){setStep("fila");} }, "Proximo: Adicionar Despachos ->")
+          React.createElement("button", { style:btn(), onClick:function(){setStep("fila");} }, "Próximo: Adicionar Despachos / Procedimentos ->")
         )
       ),
 
       // FILA
       step === "fila" && React.createElement("div", null,
+        erroProc && React.createElement("div", { style:{ background:"#fff8f8", border:"1px solid #fcc", borderRadius:8, padding:"10px 14px", marginBottom:12, fontSize:12, color:"#a00" } }, "Erro: " + erroProc),
         React.createElement("div", {
           onDrop:function(e){e.preventDefault();adicionarArquivos(Array.from(e.dataTransfer.files));},
           onDragOver:function(e){e.preventDefault();},
           onClick:function(){fileRef.current&&fileRef.current.click();},
-          style:{ border:"2px dashed #4a90d9", borderRadius:12, padding:32, textAlign:"center", cursor:"pointer", background:"white", marginBottom:14 }
+          style:{ border:"2px dashed #4a90d9", borderRadius:12, padding:28, textAlign:"center", cursor:"pointer", background:"white", marginBottom:14 }
         },
-          React.createElement("div", { style:{ fontSize:32, marginBottom:8 } }, "[ PDF ]"),
-          React.createElement("div", { style:{ fontSize:15, color:C.azul, fontWeight:"bold" } }, "Arraste os PDFs dos despachos aqui"),
-          React.createElement("div", { style:{ fontSize:12, color:"#999", marginTop:4 } }, "ou clique para selecionar (.pdf ou .txt)"),
+          React.createElement("div", { style:{ fontSize:30, marginBottom:8 } }, "[ PDF ]"),
+          React.createElement("div", { style:{ fontSize:15, color:C.azul, fontWeight:"bold" } }, "Arraste os PDFs aqui"),
+          React.createElement("div", { style:{ fontSize:12, color:"#777", marginTop:6, lineHeight:1.5 } }, "Pode incluir: despachos isolados, procedimento(s) inteiro(s), juntos ou separados.", React.createElement("br"), "A IA agrupa por número de procedimento e usa o último despacho (seguindo \"reitere-se / cumpra-se o anterior\")."),
           React.createElement("input", { ref:fileRef, type:"file", multiple:true, accept:".pdf,.txt", style:{ display:"none" }, onChange:function(e){adicionarArquivos(Array.from(e.target.files));} })
         ),
         fila.length > 0 && React.createElement("div", { style:C.card },
           React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 } },
-            React.createElement("h3", { style:{ margin:0, color:C.azul, fontSize:14 } }, "Fila (" + fila.length + " arquivo" + (fila.length!==1?"s":"") + ")"),
+            React.createElement("h3", { style:{ margin:0, color:C.azul, fontSize:14 } }, "Arquivos (" + fila.length + ")"),
             React.createElement("button", { style:btn("#c00",{padding:"4px 10px",fontSize:12}), onClick:function(){setFila([]);} }, "Limpar")
           ),
-          !settings.usarIA && React.createElement("div", { style:{ fontSize:12, color:"#7a5c00", background:"#fffbeb", border:"1px solid #f5e090", borderRadius:6, padding:"8px 10px", marginBottom:10 } }, "Modo manual: clique em 'Editar dados' em cada despacho para informar processo, tipo, teor e destinatarios."),
+          !settings.usarIA && React.createElement("div", { style:{ fontSize:12, color:"#7a5c00", background:"#fffbeb", border:"1px solid #f5e090", borderRadius:6, padding:"8px 10px", marginBottom:10 } }, "Modo manual: clique em 'Dados' em cada arquivo para informar procedimento, tipo, assunto, teor e destinatários."),
           fila.map(function(d) {
             var temManual = d.manual && d.manual.numProc;
             return React.createElement("div", { key:d.id, style:{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid #f5f5f5" } },
               React.createElement("div", { style:{ flex:1 } },
                 React.createElement("div", { style:{ fontSize:13, fontWeight:"bold" } }, d.nome),
-                React.createElement("div", { style:{ fontSize:11, color: temManual ? C.verde : "#999" } }, temManual ? ("Manual: " + d.manual.numProc + " (" + (d.manual.tipo||"PA") + ")") : (settings.usarIA ? "Extracao via IA" : "Aguardando preenchimento manual"))
+                React.createElement("div", { style:{ fontSize:11, color: temManual ? C.verde : "#999" } }, temManual ? ("Manual: " + d.manual.numProc + " (" + (d.manual.tipo||"PA") + ")") : (settings.usarIA ? "Extração via IA" : "Aguardando preenchimento manual"))
               ),
-              React.createElement("button", { style:btn(C.azul,{padding:"4px 10px",fontSize:11}), onClick:function(){ setModalManual({ item:d }); } }, temManual ? "Editar dados" : "Preencher manual"),
+              React.createElement("button", { style:btn(C.azul,{padding:"4px 10px",fontSize:11}), onClick:function(){ setModalManual({ item:d }); } }, temManual ? "Editar dados" : "Dados (manual)"),
               React.createElement("button", { style:{ background:"none", border:"none", color:"#c00", cursor:"pointer", fontSize:15 }, onClick:function(){setFila(function(p){return p.filter(function(x){return x.id!==d.id;});});} }, "X")
             );
           })
         ),
         React.createElement("div", { style:{ display:"flex", gap:10 } },
-          React.createElement("button", { style:btnOut(), onClick:function(){setStep("config");} }, "<- Configuracoes"),
-          fila.length > 0 && React.createElement("button", { style:Object.assign({},btn(),{flex:1,fontSize:14,padding:"12px 20px"}), onClick:processarFila }, "Processar " + fila.length + " despacho" + (fila.length!==1?"s":"") + " e gerar oficios")
+          React.createElement("button", { style:btnOut(), onClick:function(){setStep("config");} }, "<- Configurações"),
+          fila.length > 0 && React.createElement("button", { style:Object.assign({},btn(),{flex:1,fontSize:14,padding:"12px 20px"}), onClick:processarFila }, "Processar e gerar ofícios")
         ),
         modalManual && React.createElement(ModalManual, {
           item: modalManual.item,
@@ -703,78 +794,65 @@ export default function App() {
       // PROCESSANDO
       step === "processando" && React.createElement("div", { style:Object.assign({},C.card,{textAlign:"center",padding:48}) },
         React.createElement("div", { style:{ fontSize:40, marginBottom:14 } }, "[ ... ]"),
-        React.createElement("h2", { style:{ color:C.azul, marginBottom:8 } }, "Processando despachos..."),
-        React.createElement("div", { style:{ color:"#666", marginBottom:20, fontSize:14 } }, progresso.msg),
-        progresso.total > 0 && React.createElement("div", null,
-          React.createElement("div", { style:{ background:"#f0f4f8", borderRadius:8, height:10, overflow:"hidden", marginBottom:6 } },
-            React.createElement("div", { style:{ background:C.azul, height:"100%", width:(progresso.atual/progresso.total*100)+"%", transition:"width .3s", borderRadius:8 } })
-          ),
-          React.createElement("div", { style:{ fontSize:12, color:"#999" } }, progresso.atual + " de " + progresso.total)
-        )
+        React.createElement("h2", { style:{ color:C.azul, marginBottom:8 } }, "Processando..."),
+        React.createElement("div", { style:{ color:"#666", marginBottom:20, fontSize:14 } }, progresso.msg)
       ),
 
       // RESOLUCAO
       step === "resolucao" && React.createElement(TelaResolucao, {
         pendentes:pendentes,
-        comarca:comarca,
-        lerArquivo:lerArquivo,
-        extrairPessoaFisica:extrairPessoaFisica,
-        salvarDest:salvarDest,
-        destDB:destDB,
-        usarIA: settings.usarIA && !!settings.key,
-        onConfirmar:async function(extras) {
+        onConfirmar:function(extras) {
+          // salva no banco os marcados
           var novosParaSalvar = extras.filter(function(r){ return r.salvar && r.nome; });
           if (novosParaSalvar.length > 0) {
-            var novaLista = destDB.concat(novosParaSalvar.map(function(r){ return { id:uid(), comarca:comarca, chave:r.chave||r.nome.toLowerCase().slice(0,20), nome:r.nome, email:r.email||"", tratamento:r.tratamento||"A " + r.nome, tipo:"pessoa_fisica", cpf:r.cpf||null, telefone:r.telefone||null }; }));
-            await salvarDest(novaLista);
+            var novaLista = destDB.concat(novosParaSalvar.map(function(r){ return { id:uid(), comarca:comarca, chave:r.chave||normChave(r.nome).slice(0,24), nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", tipo:"institucional" }; }));
+            salvarDest(novaLista);
           }
-          var filaAtualizada = fila.map(function(d) {
-            var extrasDoArquivo = extras.filter(function(r){ return r.arquivoDespacho === d.nome && r.nome; });
-            if (extrasDoArquivo.length === 0) return d;
-            return Object.assign({}, d, { destResolvidos: d.destResolvidos.concat(extrasDoArquivo.map(function(r){ return { id:uid(), nome:r.nome, email:r.email||"", tratamento:r.tratamento||"A " + r.nome, chave:r.chave||r.nome.toLowerCase().slice(0,20) }; })) });
+          // injeta os destinatarios resolvidos manualmente em seus procedimentos
+          var porProc = {};
+          extras.forEach(function(r){ if(!r.nome) return; (porProc[r.procId]=porProc[r.procId]||[]).push({ id:uid(), nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) }); });
+          var listaAtualizada = procs.map(function(p){
+            var add = porProc[p.procId] || [];
+            return add.length ? Object.assign({}, p, { destResolvidos: p.destResolvidos.concat(add) }) : p;
           });
-          setFila(filaAtualizada);
-          finalizarProcessamento(filaAtualizada);
+          setProcs(listaAtualizada);
+          finalizar(listaAtualizada);
         },
-        onPular:function(){ finalizarProcessamento(fila); }
+        onPular:function(){ finalizar(procs); }
       }),
 
       // RESULTADO
       step === "resultado" && resultado && React.createElement("div", null,
         React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:14 } },
-          [["Oficios", resultado.grupos.length],["Certidoes", resultado.certs.length],["Problemas", erros.length]].map(function(item) {
-            return React.createElement("div", { key:item[0], style:Object.assign({},C.card,{padding:16,textAlign:"center",marginBottom:0,borderLeft:item[0]==="Problemas"&&item[1]>0?"4px solid #e74":"none"}) },
-              React.createElement("div", { style:{ fontSize:28, fontWeight:"bold", color:item[0]==="Problemas"&&item[1]>0?"#e74":C.azul } }, item[1]),
+          [["Ofícios", resultado.grupos.length],["Certidões", resultado.certs.length],["Procedimentos", procs.length]].map(function(item) {
+            return React.createElement("div", { key:item[0], style:Object.assign({},C.card,{padding:16,textAlign:"center",marginBottom:0}) },
+              React.createElement("div", { style:{ fontSize:28, fontWeight:"bold", color:C.azul } }, item[1]),
               React.createElement("div", { style:{ fontSize:12, color:"#888" } }, item[0])
             );
           })
         ),
-        erros.length > 0 && React.createElement("div", { style:Object.assign({},C.card,{border:"1px solid #fcc",background:"#fff8f8"}) },
-          React.createElement("h3", { style:{ margin:"0 0 8px", color:"#c00", fontSize:13 } }, "Arquivos com problema:"),
-          erros.map(function(d){ return React.createElement("div", { key:d.id, style:{ fontSize:12, color:"#a00" } }, "- " + d.nome + ": " + (d.status==="sem_destinatario"?"Nenhum destinatario encontrado":d.erro)); })
-        ),
         React.createElement("div", { style:C.card },
-          React.createElement("h3", { style:{ margin:"0 0 12px", color:C.azul, fontSize:14 } }, "Oficios Consolidados"),
+          React.createElement("h3", { style:{ margin:"0 0 12px", color:C.azul, fontSize:14 } }, "Ofícios (com juntada por destinatário)"),
           resultado.grupos.map(function(g, i) {
             return React.createElement("div", { key:i, style:{ border:"1px solid #e8f0fe", borderRadius:8, padding:12, marginBottom:10 } },
-              React.createElement("div", { style:{ fontWeight:"bold", color:C.azul, fontSize:14 } }, "Oficio no " + g.numOficio + " - " + g.dest.nome),
-              React.createElement("div", { style:{ fontSize:12, marginTop:3, color: g.dest.email ? C.verde : "#c66" } }, g.dest.email ? "Email: " + g.dest.email : "Email nao cadastrado - preencher antes de enviar"),
+              React.createElement("div", { style:{ fontWeight:"bold", color:C.azul, fontSize:14 } }, "Ofício nº " + g.numOficio + " - " + g.dest.nome),
+              React.createElement("div", { style:{ fontSize:12, marginTop:3, color: g.dest.email ? C.verde : "#c66" } }, g.dest.email ? "Email: " + g.dest.email : "Email não cadastrado - preencher antes de enviar"),
+              g.assunto && React.createElement("div", { style:{ fontSize:12, marginTop:3, color:"#555" } }, "Assunto: " + g.assunto),
               React.createElement("div", { style:{ marginTop:8, paddingTop:8, borderTop:"1px solid #f5f5f5" } },
                 g.itens.map(function(item, j) {
-                  return React.createElement("div", { key:j, style:{ fontSize:11, color:"#555", padding:"2px 0" } }, "[+] " + item.numProc + " (" + item.tipo + ") - " + item.teor.slice(0,80) + (item.teor.length>80?"...":""));
+                  return React.createElement("div", { key:j, style:{ fontSize:11, color:"#555", padding:"2px 0" } }, "[+] " + item.numProc + " (" + item.tipo + ") - " + (item.teor||"").slice(0,90) + ((item.teor||"").length>90?"...":""));
                 })
-              ),
-              React.createElement("div", { style:{ marginTop:8, fontSize:11, color:C.azul, background:"#f0f4ff", padding:"6px 10px", borderRadius:6 } }, "Anexar ao email: docx do oficio + " + g.itens.map(function(x){return x.arquivo;}).join(", "))
+              )
             );
           })
         ),
         React.createElement("div", { style:C.card },
-          React.createElement("h3", { style:{ margin:"0 0 10px", color:C.azul, fontSize:14 } }, "Certidoes de Expedicao"),
-          React.createElement("div", { style:{ fontSize:12, color:"#666", marginBottom:10 } }, "Juntar aos autos apos expedicao."),
+          React.createElement("h3", { style:{ margin:"0 0 10px", color:C.azul, fontSize:14 } }, "Certidões de Expedição"),
+          React.createElement("div", { style:{ fontSize:12, color:"#666", marginBottom:10 } }, "Juntar aos autos após expedição."),
           resultado.certs.map(function(cert, i) {
             return React.createElement("div", { key:i, style:{ border:"1px solid #dff0d8", borderRadius:8, padding:12, marginBottom:8, background:"#fafff5" } },
               React.createElement("div", { style:{ fontWeight:"bold", color:"#2d5a1b", fontSize:13 } }, cert.numProc + " (" + cert.tipo + ")"),
-              cert.exps.map(function(exp, j) { return React.createElement("div", { key:j, style:{ fontSize:11, color:"#444" } }, (j+1) + ". " + exp.nome + " -- Oficio no " + exp.numOficio); })
+              cert.exps.map(function(exp, j) { return React.createElement("div", { key:j, style:{ fontSize:11, color:"#444" } }, (j+1) + ". " + exp.nome + " — Ofício nº " + exp.numOficio); })
             );
           })
         ),
@@ -783,30 +861,30 @@ export default function App() {
           React.createElement("div", { style:{ border:"2px solid #4a90d9", borderRadius:10, padding:16, textAlign:"center" } },
             React.createElement("div", { style:{ fontSize:28, marginBottom:8 } }, "[ZIP]"),
             React.createElement("div", { style:{ fontWeight:"bold", color:C.azul, fontSize:14, marginBottom:6 } }, "Baixar pacote ZIP"),
-            React.createElement("div", { style:{ fontSize:12, color:"#666", marginBottom:12 } }, "Um .zip com os oficios (.docx timbrado), certidoes, e-mails (.eml para Outlook) e um checklist. Extraia e abra no Word/Outlook."),
+            React.createElement("div", { style:{ fontSize:12, color:"#666", marginBottom:12 } }, "Ofícios (.docx timbrado), certidões, e-mails (.eml) e checklist."),
             React.createElement("button", { style:Object.assign({},btn("#4a90d9"),{minWidth:200}), onClick:baixarZip }, "Baixar ZIP")
           ),
           progresso.msg && React.createElement("div", { style:{ marginTop:12, background:"#e8f0fe", borderRadius:8, padding:10, textAlign:"center", fontSize:13, color:C.azul } }, progresso.msg + (progresso.total>0?" ("+progresso.atual+"/"+progresso.total+")":""))
         ),
-        React.createElement("button", { style:btnOut(), onClick:function(){ setStep("fila"); setResultado(null); } }, "<- Nova expedicao")
+        React.createElement("button", { style:btnOut(), onClick:function(){ setStep("fila"); setResultado(null); setProcs([]); } }, "<- Nova expedição")
       )
     )
   );
 }
 
 function Header(props) {
-  var screen = props.screen; var setScreen = props.setScreen; var comarca = props.comarca; var mudarComarca = props.mudarComarca;
+  var screen = props.screen; var setScreen = props.setScreen;
   var steps = props.steps; var stepLabels = props.stepLabels; var step = props.step; var onSettings = props.onSettings;
   return React.createElement("div", { style:{ background:"linear-gradient(135deg,#0a2440 0%,#1a3a5c 100%)", color:"white", padding:"16px 20px", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" } },
     React.createElement("div", null,
-      React.createElement("div", { style:{ fontWeight:"bold", fontSize:16 } }, "MPBA - Expedicao Consolidada de Oficios"),
-      React.createElement("div", { style:{ fontSize:11, opacity:.7 } }, "Promotorias de Justica")
+      React.createElement("div", { style:{ fontWeight:"bold", fontSize:16 } }, "MPBA - Expedição Consolidada de Ofícios"),
+      React.createElement("div", { style:{ fontSize:11, opacity:.7 } }, "Promotorias de Justiça")
     ),
     React.createElement("div", { style:{ marginLeft:"auto", display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" } },
       screen === "main" && steps && steps.map(function(s, i) {
         return React.createElement("div", { key:s, style:{ padding:"3px 10px", borderRadius:20, fontSize:11, background:step===s?"rgba(255,255,255,.25)":"rgba(255,255,255,.08)", color:step===s?"white":"rgba(255,255,255,.4)", fontWeight:step===s?"bold":"normal" } }, stepLabels[i]);
       }),
-      React.createElement("button", { onClick:function(){setScreen(screen==="banco"?"main":"banco");}, style:{ background:"rgba(255,255,255,.15)", border:"none", color:"white", padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer" } }, "Destinatarios"),
+      React.createElement("button", { onClick:function(){setScreen(screen==="banco"?"main":"banco");}, style:{ background:"rgba(255,255,255,.15)", border:"none", color:"white", padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer" } }, "Destinatários"),
       React.createElement("button", { onClick:function(){setScreen(screen==="servidores"?"main":"servidores");}, style:{ background:"rgba(255,255,255,.15)", border:"none", color:"white", padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer" } }, "Servidores"),
       onSettings && React.createElement("button", { onClick:onSettings, style:{ background:"rgba(255,255,255,.15)", border:"none", color:"white", padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer" } }, "Config")
     )
@@ -814,21 +892,22 @@ function Header(props) {
 }
 
 function ModalSettings(props) {
-  var [form, setForm] = useState({ key: props.settings.key || "", model: props.settings.model || "claude-sonnet-4-6", usarIA: props.settings.usarIA !== false });
+  var [form, setForm] = useState({ key: props.settings.key || "", model: props.settings.model || "claude-sonnet-4-6", usarIA: props.settings.usarIA !== false, promotor: props.settings.promotor || "Rui César Farias dos Santos Júnior" });
   function f(k, v) { setForm(function(p){ return Object.assign({},p,{[k]:v}); }); }
   return React.createElement(Modal, null,
-    React.createElement("h3", { style:{ margin:"0 0 6px", color:C.azul } }, "Configuracoes"),
-    React.createElement("p", { style:{ margin:"0 0 16px", fontSize:12, color:"#777" } }, "A chave da API e usada apenas neste navegador (localStorage) e enviada direto para a Anthropic. Nao trafega por nenhum servidor intermediario."),
+    React.createElement("h3", { style:{ margin:"0 0 6px", color:C.azul } }, "Configurações"),
+    React.createElement("p", { style:{ margin:"0 0 16px", fontSize:12, color:"#777" } }, "A chave da API é usada apenas neste navegador e enviada direto para a Anthropic."),
     React.createElement("div", { style:{ display:"grid", gap:12 } },
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Nome do Promotor de Justiça"), React.createElement("input", { style:C.input, value:form.promotor, onChange:function(e){f("promotor",e.target.value);}, placeholder:"Ex: Rui César Farias dos Santos Júnior" })),
       React.createElement("div", { style:{ display:"flex", alignItems:"center", gap:8 } },
         React.createElement("input", { type:"checkbox", id:"usarIA", checked:form.usarIA, onChange:function(e){f("usarIA",e.target.checked);} }),
-        React.createElement("label", { htmlFor:"usarIA", style:{ fontSize:13, color:"#333", cursor:"pointer", fontWeight:"bold" } }, "Usar extracao automatica por IA (Claude)")
+        React.createElement("label", { htmlFor:"usarIA", style:{ fontSize:13, color:"#333", cursor:"pointer", fontWeight:"bold" } }, "Usar extração automática por IA (Claude)")
       ),
       React.createElement("div", null, React.createElement("label", { style:C.label }, "Chave da API Anthropic (sk-ant-...)"), React.createElement("input", { style:C.input, type:"password", value:form.key, onChange:function(e){f("key",e.target.value);}, placeholder:"sk-ant-...", autoComplete:"off" })),
       React.createElement("div", null, React.createElement("label", { style:C.label }, "Modelo"), React.createElement("select", { style:C.input, value:form.model, onChange:function(e){f("model",e.target.value);} },
         React.createElement("option", { value:"claude-sonnet-4-6" }, "claude-sonnet-4-6 (recomendado)"),
         React.createElement("option", { value:"claude-opus-4-8" }, "claude-opus-4-8 (mais preciso)"),
-        React.createElement("option", { value:"claude-haiku-4-5-20251001" }, "claude-haiku-4-5 (mais rapido/barato)")
+        React.createElement("option", { value:"claude-haiku-4-5-20251001" }, "claude-haiku-4-5 (mais rápido)")
       ))
     ),
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:18 } },
@@ -846,32 +925,34 @@ function ModalManual(props) {
   var m = item.manual || {};
   var [numProc, setNumProc] = useState(m.numProc || "");
   var [tipo, setTipo] = useState(m.tipo || "PA");
+  var [assunto, setAssunto] = useState(m.assunto || "");
   var [teor, setTeor] = useState(m.teor || "");
-  var [sel, setSel] = useState((m.destinatarios || []).filter(function(t){ return lista.some(function(d){ return d.chave===t; }); }));
-  var [livre, setLivre] = useState((m.destinatarios || []).filter(function(t){ return !lista.some(function(d){ return d.chave===t; }); }).join(", "));
+  var [sel, setSel] = useState((m.destinatarios || []).filter(function(t){ return typeof t === "string" && lista.some(function(d){ return d.chave===t; }); }));
+  var [livre, setLivre] = useState((m.destinatarios || []).filter(function(t){ return typeof t === "string" && !lista.some(function(d){ return d.chave===t; }); }).join(", "));
 
   function toggle(chave) {
     setSel(function(prev){ return prev.indexOf(chave)!==-1 ? prev.filter(function(x){return x!==chave;}) : prev.concat([chave]); });
   }
   function salvar() {
-    if (!numProc.trim()) { alert("Informe o numero do procedimento."); return; }
+    if (!numProc.trim()) { alert("Informe o número do procedimento."); return; }
     var livres = livre.split(",").map(function(s){return s.trim();}).filter(Boolean);
     var dests = sel.concat(livres);
-    if (dests.length === 0) dests = ["Destinatario a identificar"];
-    props.onSave({ numProc:numProc.trim(), tipo:tipo, teor:teor.trim(), destinatarios:dests });
+    if (dests.length === 0) dests = ["Destinatário a identificar"];
+    props.onSave({ numProc:numProc.trim(), tipo:tipo, assunto:assunto.trim(), teor:teor.trim(), destinatarios:dests });
   }
   return React.createElement(Modal, null,
-    React.createElement("h3", { style:{ margin:"0 0 4px", color:C.azul } }, "Dados do despacho"),
+    React.createElement("h3", { style:{ margin:"0 0 4px", color:C.azul } }, "Dados do procedimento"),
     React.createElement("p", { style:{ margin:"0 0 14px", fontSize:12, color:"#777" } }, item.nome),
     React.createElement("div", { style:{ display:"grid", gap:12 } },
       React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:10 } },
-        React.createElement("div", null, React.createElement("label", { style:C.label }, "Numero do procedimento *"), React.createElement("input", { style:C.input, value:numProc, onChange:function(e){setNumProc(e.target.value);}, placeholder:"Ex: 003.9.000123/2025" })),
+        React.createElement("div", null, React.createElement("label", { style:C.label }, "Número do procedimento *"), React.createElement("input", { style:C.input, value:numProc, onChange:function(e){setNumProc(e.target.value);}, placeholder:"Ex: 201.9.551584/2025" })),
         React.createElement("div", null, React.createElement("label", { style:C.label }, "Tipo"), React.createElement("select", { style:C.input, value:tipo, onChange:function(e){setTipo(e.target.value);} }, TIPOS_PROC.map(function(t){ return React.createElement("option", { key:t, value:t }, t); })))
       ),
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Teor / diligencia"), React.createElement("textarea", { style:Object.assign({},C.input,{minHeight:64,resize:"vertical"}), value:teor, onChange:function(e){setTeor(e.target.value);}, placeholder:"Resumo do que foi determinado oficiar/requisitar" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Assunto (sintético)"), React.createElement("input", { style:C.input, value:assunto, onChange:function(e){setAssunto(e.target.value);}, placeholder:"Ex: Solicita informações." })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Teor (completa \"solicitar ___\")"), React.createElement("textarea", { style:Object.assign({},C.input,{minHeight:64,resize:"vertical"}), value:teor, onChange:function(e){setTeor(e.target.value);}, placeholder:"Ex: informações sobre eventual registro de ocorrência relacionado aos fatos" })),
       React.createElement("div", null,
-        React.createElement("label", { style:C.label }, "Destinatarios (banco da comarca)"),
-        lista.length === 0 && React.createElement("div", { style:{ fontSize:12, color:"#999" } }, "Nenhum destinatario no banco desta comarca."),
+        React.createElement("label", { style:C.label }, "Destinatários (banco da comarca)"),
+        lista.length === 0 && React.createElement("div", { style:{ fontSize:12, color:"#999" } }, "Nenhum destinatário no banco desta comarca."),
         React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, maxHeight:160, overflowY:"auto" } },
           lista.map(function(d){
             return React.createElement("label", { key:d.id, style:{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"#333", cursor:"pointer", padding:"2px 0" } },
@@ -881,7 +962,7 @@ function ModalManual(props) {
           })
         )
       ),
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Outros destinatarios (separados por virgula)"), React.createElement("input", { style:C.input, value:livre, onChange:function(e){setLivre(e.target.value);}, placeholder:"Ex: conselho tutelar, nome de pessoa" }))
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Outros destinatários (separados por vírgula)"), React.createElement("input", { style:C.input, value:livre, onChange:function(e){setLivre(e.target.value);}, placeholder:"Ex: conselho tutelar" }))
     ),
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:18 } },
       React.createElement("button", { style:btnOut({flex:1}), onClick:props.onClose }, "Cancelar"),
@@ -895,20 +976,20 @@ function ModalDest(props) {
   var [form, setForm] = useState(Object.assign({}, dest));
   function f(k, v) { setForm(function(p){ return Object.assign({},p,{[k]:v}); }); }
   return React.createElement(Modal, null,
-    React.createElement("h3", { style:{ margin:"0 0 18px", color:"#0a2440" } }, isNew ? "Novo Destinatario" : "Editar Destinatario"),
+    React.createElement("h3", { style:{ margin:"0 0 18px", color:"#0a2440" } }, isNew ? "Novo Destinatário" : "Editar Destinatário"),
     React.createElement("div", { style:{ display:"grid", gap:12 } },
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Tipo"), React.createElement("select", { value:form.tipo, onChange:function(e){f("tipo",e.target.value);}, style:C.input }, React.createElement("option", { value:"institucional" }, "Institucional (orgao/entidade)"), React.createElement("option", { value:"pessoa_fisica" }, "Pessoa Fisica"))),
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Nome completo *"), React.createElement("input", { style:C.input, value:form.nome, onChange:function(e){f("nome",e.target.value);}, placeholder:"Ex: Conselho Tutelar de Prado" })),
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Palavra-chave *"), React.createElement("input", { style:C.input, value:form.chave, onChange:function(e){f("chave",e.target.value);}, placeholder:"Como aparece no despacho (ex: conselho tutelar)" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Órgão / Nome *"), React.createElement("input", { style:C.input, value:form.nome, onChange:function(e){f("nome",e.target.value);}, placeholder:"Ex: Delegacia de Polícia de Nova Viçosa" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Palavra-chave *"), React.createElement("input", { style:C.input, value:form.chave, onChange:function(e){f("chave",e.target.value);}, placeholder:"Como aparece no despacho (ex: policia civil)" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Vocativo (tratamento)"), React.createElement("input", { style:C.input, value:form.vocativo||"", onChange:function(e){f("vocativo",e.target.value);}, placeholder:"Ex: A Sua Excelência o Senhor" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Nome da autoridade (opcional)"), React.createElement("input", { style:C.input, value:form.nomeAutoridade||"", onChange:function(e){f("nomeAutoridade",e.target.value);}, placeholder:"Ex: MARCOS RENATO DE LIMA LUDOVICO" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Endereço"), React.createElement("input", { style:C.input, value:form.endereco||"", onChange:function(e){f("endereco",e.target.value);}, placeholder:"Ex: Av. dos Cajueiros, 1, Centro" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "CEP / Cidade"), React.createElement("input", { style:C.input, value:form.cepCidade||"", onChange:function(e){f("cepCidade",e.target.value);}, placeholder:"Ex: 45920-000 Nova Viçosa - BA" })),
       React.createElement("div", null, React.createElement("label", { style:C.label }, "Email"), React.createElement("input", { style:C.input, value:form.email||"", onChange:function(e){f("email",e.target.value);}, placeholder:"email@dominio.gov.br" })),
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Tratamento no oficio"), React.createElement("input", { style:C.input, value:form.tratamento||"", onChange:function(e){f("tratamento",e.target.value);}, placeholder:"Ex: Ao Delegado de Policia" })),
-      form.tipo === "pessoa_fisica" && React.createElement("div", null, React.createElement("label", { style:C.label }, "CPF"), React.createElement("input", { style:C.input, value:form.cpf||"", onChange:function(e){f("cpf",e.target.value);} })),
-      form.tipo === "pessoa_fisica" && React.createElement("div", null, React.createElement("label", { style:C.label }, "Telefone"), React.createElement("input", { style:C.input, value:form.telefone||"", onChange:function(e){f("telefone",e.target.value);} })),
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Comarca"), React.createElement("select", { value:form.comarca||comarca, onChange:function(e){f("comarca",e.target.value);}, style:C.input }, React.createElement("option", { value:"prado" }, "Prado/BA"), React.createElement("option", { value:"nova_vicosa" }, "Nova Vicosa/BA"), React.createElement("option", { value:"alcobaca" }, "Alcobaca/BA"), React.createElement("option", { value:"todos" }, "Todas")))
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Comarca"), React.createElement("select", { value:form.comarca||comarca, onChange:function(e){f("comarca",e.target.value);}, style:C.input }, React.createElement("option", { value:"prado" }, "Prado/BA"), React.createElement("option", { value:"nova_vicosa" }, "Nova Viçosa/BA"), React.createElement("option", { value:"alcobaca" }, "Alcobaça/BA"), React.createElement("option", { value:"todos" }, "Todas")))
     ),
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:18 } },
       React.createElement("button", { style:btnOut({flex:1}), onClick:onClose }, "Cancelar"),
-      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ if(!form.nome||!form.chave){alert("Preencha Nome e Palavra-chave.");return;} onSave(form); } }, "Salvar")
+      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ if(!form.nome||!form.chave){alert("Preencha Órgão/Nome e Palavra-chave.");return;} onSave(form); } }, "Salvar")
     )
   );
 }
@@ -920,67 +1001,36 @@ function ModalServ(props) {
   return React.createElement(Modal, null,
     React.createElement("h3", { style:{ margin:"0 0 18px", color:"#0a2440" } }, isNew ? "Novo Servidor" : "Editar Servidor"),
     React.createElement("div", { style:{ display:"grid", gap:12 } },
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Nome completo *"), React.createElement("input", { style:C.input, value:form.nome, onChange:function(e){f("nome",e.target.value);}, placeholder:"Ex: Rodrigo Ribeiro Secundino" })),
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Matricula *"), React.createElement("input", { style:C.input, value:form.matricula, onChange:function(e){f("matricula",e.target.value);}, placeholder:"Ex: 355.757" })),
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Comarca principal"), React.createElement("select", { value:form.comarca, onChange:function(e){f("comarca",e.target.value);}, style:C.input }, React.createElement("option", { value:"prado" }, "Prado/BA"), React.createElement("option", { value:"nova_vicosa" }, "Nova Vicosa/BA"), React.createElement("option", { value:"alcobaca" }, "Alcobaca/BA")))
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Nome completo *"), React.createElement("input", { style:C.input, value:form.nome, onChange:function(e){f("nome",e.target.value);}, placeholder:"Ex: Manjari Autran Almeida de Oliveira" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Cargo *"), React.createElement("input", { style:C.input, value:form.cargo||"", onChange:function(e){f("cargo",e.target.value);}, placeholder:"Ex: Assistente Técnico Administrativo" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Matrícula"), React.createElement("input", { style:C.input, value:form.matricula, onChange:function(e){f("matricula",e.target.value);}, placeholder:"Ex: 355.757" })),
+      React.createElement("div", null, React.createElement("label", { style:C.label }, "Comarca principal"), React.createElement("select", { value:form.comarca, onChange:function(e){f("comarca",e.target.value);}, style:C.input }, React.createElement("option", { value:"prado" }, "Prado/BA"), React.createElement("option", { value:"nova_vicosa" }, "Nova Viçosa/BA"), React.createElement("option", { value:"alcobaca" }, "Alcobaça/BA")))
     ),
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:18 } },
       React.createElement("button", { style:btnOut({flex:1}), onClick:onClose }, "Cancelar"),
-      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ if(!form.nome||!form.matricula){alert("Preencha nome e matricula.");return;} onSave(form); } }, "Salvar")
+      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ if(!form.nome||!form.cargo){alert("Preencha nome e cargo.");return;} onSave(form); } }, "Salvar")
     )
   );
 }
 
 function TelaResolucao(props) {
-  var pendentes = props.pendentes; var comarca = props.comarca; var lerArquivo = props.lerArquivo;
-  var extrairPessoaFisica = props.extrairPessoaFisica; var onConfirmar = props.onConfirmar; var onPular = props.onPular;
-  var usarIA = props.usarIA;
-  var [itens, setItens] = useState(pendentes.map(function(p){ return Object.assign({},p,{modo:"manual",salvar:true,carregando:false,procFile:null,form:{nome:"",email:"",cpf:"",telefone:"",tratamento:"",chave:"",tipo:"pessoa_fisica"}}); }));
+  var pendentes = props.pendentes; var onConfirmar = props.onConfirmar; var onPular = props.onPular;
+  var [itens, setItens] = useState(pendentes.map(function(p){
+    var ia = p.ia || {};
+    return Object.assign({}, p, { salvar:true, form:{ nome: ia.orgao || p.textoOriginal || "", vocativo: ia.vocativo || "", nomeAutoridade: ia.nomeAutoridade || "", endereco: ia.endereco || "", cepCidade: ia.cepCidade || "", email: ia.email || "", chave: normChave(ia.orgao || p.textoOriginal || "").slice(0,24) } });
+  }));
   function atualizar(id, upd) { setItens(function(prev){ return prev.map(function(x){ return x.id===id?Object.assign({},x,upd):x; }); }); }
-  async function extrairComIA(item) {
-    if (!item.procFile) { alert("Selecione o PDF do procedimento."); return; }
-    atualizar(item.id, { carregando:true });
-    try {
-      var resultado = await extrairPessoaFisica(item.despachoFile, item.procFile);
-      if (resultado && resultado.length > 0) {
-        var pf = resultado[0];
-        atualizar(item.id, { carregando:false, form:{ nome:pf.nome||"", email:pf.email||"", cpf:pf.cpf||"", telefone:pf.telefone||"", tratamento:pf.tratamento||"A " + (pf.nome||""), chave:(pf.nome||"").toLowerCase().slice(0,20), tipo:"pessoa_fisica" } });
-      } else {
-        alert("Nenhuma pessoa fisica encontrada para: " + item.textoOriginal);
-        atualizar(item.id, { carregando:false });
-      }
-    } catch(e) { alert("Erro: " + e); atualizar(item.id, { carregando:false }); }
-  }
   return React.createElement("div", null,
     React.createElement("div", { style:{ background:"#fffbeb", border:"1px solid #f5e090", borderRadius:12, padding:16, marginBottom:14 } },
-      React.createElement("h3", { style:{ margin:"0 0 6px", color:"#7a5c00", fontSize:14 } }, pendentes.length + " destinatario" + (pendentes.length!==1?"s":"") + " nao encontrado" + (pendentes.length!==1?"s":"") + " no banco"),
-      React.createElement("p", { style:{ margin:0, fontSize:12, color:"#665500" } }, "Para cada item, preencha os dados manualmente" + (usarIA ? " ou use IA para extrair do procedimento." : "."))
+      React.createElement("h3", { style:{ margin:"0 0 6px", color:"#7a5c00", fontSize:14 } }, pendentes.length + " destinatário(s) não encontrado(s) no banco"),
+      React.createElement("p", { style:{ margin:0, fontSize:12, color:"#665500" } }, "Confira/complete os dados de cada um. A IA já preencheu o que conseguiu extrair.")
     ),
     itens.map(function(item, idx) {
       return React.createElement("div", { key:item.id, style:Object.assign({},C.card) },
-        React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 } },
-          React.createElement("div", null,
-            React.createElement("div", { style:{ fontWeight:"bold", color:"#0a2440", fontSize:14 } }, (idx+1) + ". \"" + item.textoOriginal + "\""),
-            React.createElement("div", { style:{ fontSize:12, color:"#888", marginTop:2 } }, "Arquivo: " + item.arquivoDespacho)
-          ),
-          usarIA && React.createElement("div", { style:{ display:"flex", gap:6 } },
-            React.createElement("button", { style:btn(item.modo==="manual"?"#0a2440":"#999",{padding:"4px 10px",fontSize:11}), onClick:function(){atualizar(item.id,{modo:"manual"});} }, "Manual"),
-            React.createElement("button", { style:btn(item.modo==="ia"?"#7c3aed":"#999",{padding:"4px 10px",fontSize:11}), onClick:function(){atualizar(item.id,{modo:"ia"});} }, "Extrair com IA")
-          )
-        ),
-        usarIA && item.modo === "ia" && React.createElement("div", { style:{ background:"#f5f0ff", borderRadius:8, padding:12, marginBottom:12 } },
-          React.createElement("div", { style:{ fontSize:12, color:"#5b21b6", marginBottom:8 } }, "Selecione o PDF do procedimento completo:"),
-          React.createElement("div", { style:{ display:"flex", gap:8, alignItems:"center" } },
-            React.createElement("label", { style:Object.assign({},btn("#7c3aed",{padding:"6px 12px",fontSize:12,cursor:"pointer"})) },
-              item.procFile ? item.procFile.name : "Selecionar procedimento",
-              React.createElement("input", { type:"file", accept:".pdf,.txt", style:{ display:"none" }, onChange:function(e){ if(e.target.files[0]) atualizar(item.id,{procFile:e.target.files[0]}); } })
-            ),
-            React.createElement("button", { style:btn(item.procFile&&!item.carregando?C.verde:"#ccc",{padding:"6px 12px",fontSize:12}), disabled:!item.procFile||item.carregando, onClick:function(){extrairComIA(item);} }, item.carregando ? "Extraindo..." : "Extrair")
-          )
-        ),
+        React.createElement("div", { style:{ fontWeight:"bold", color:"#0a2440", fontSize:14, marginBottom:10 } }, (idx+1) + ". \"" + item.textoOriginal + "\""),
         React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 } },
-          [["Nome completo *","nome",""],["Email","email","email@dominio.com"],["CPF","cpf",""],["Telefone","telefone",""],["Tratamento no oficio","tratamento","A Senhor(a) Nome"],["Palavra-chave","chave","como aparece no despacho"]].map(function(field) {
-            return React.createElement("div", { key:field[1] },
+          [["Órgão / Nome *","nome","Delegacia de Polícia de ..."],["Vocativo","vocativo","A Sua Excelência o Senhor"],["Nome da autoridade","nomeAutoridade",""],["Email","email","email@dominio.com"],["Endereço","endereco","Av. ..., nº, bairro"],["CEP / Cidade","cepCidade","00000-000 Cidade - BA"],["Palavra-chave","chave","como aparece no despacho"]].map(function(field) {
+            return React.createElement("div", { key:field[1], style: field[1]==="nome"?{gridColumn:"1/-1"}:null },
               React.createElement("label", { style:C.label }, field[0]),
               React.createElement("input", { style:C.input, value:item.form[field[1]]||"", onChange:function(e){ atualizar(item.id,{form:Object.assign({},item.form,{[field[1]]:e.target.value})}); }, placeholder:field[2] })
             );
@@ -994,7 +1044,7 @@ function TelaResolucao(props) {
     }),
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:8 } },
       React.createElement("button", { style:btnOut(), onClick:onPular }, "Pular e gerar assim mesmo"),
-      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,arquivoDespacho:x.arquivoDespacho}); })); } }, "Confirmar e gerar oficios")
+      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,procId:x.procId}); })); } }, "Confirmar e gerar ofícios")
     )
   );
 }

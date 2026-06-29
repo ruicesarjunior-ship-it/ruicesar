@@ -53,14 +53,41 @@ despacho é então preenchido manualmente (número do processo, tipo, teor e
 destinatários) pelo botão **Preencher manual** na fila. Mesmo com a IA ligada,
 qualquer despacho pode ter seus dados editados/sobrescritos manualmente.
 
+## Formato do ofício
+
+O ofício segue o modelo oficial da Promotoria (Times New Roman 11pt, com timbre):
+número no formato `NNN.AAAA`, vocativo + autoridade + órgão + endereço do
+destinatário, `Assunto:` e `Referência:`, corpo "de ordem do" Promotor de Justiça,
+e assinatura do **servidor** (com cargo) "(assinado eletronicamente)". A data sai
+como "data da assinatura eletrônica".
+
+Quando o mesmo destinatário recebe diligências de **vários procedimentos**, elas
+são **juntadas em um único ofício** (lista numerada de referências).
+
+## Extração por IA (multi-PDF)
+
+Você pode jogar vários PDFs de uma vez: **despachos isolados, procedimento(s)
+inteiro(s), juntos ou separados**. A IA:
+
+- **agrupa por número de procedimento**;
+- localiza o **último despacho** de cada procedimento;
+- segue remissões do tipo *"reitere-se"* / *"cumpra-se o despacho anterior"* para
+  identificar os comandos realmente a cumprir;
+- extrai destinatários, assunto sintético, tipo e teor.
+
+PDFs **digitais** têm o texto lido no próprio navegador (sem limite prático de
+páginas, mais barato). PDFs **escaneados** (sem texto) caem automaticamente no
+modo imagem da IA.
+
 ## Fluxo de uso
 
-1. **Configurar** — comarca, servidor responsável, número inicial do ofício e data.
-2. **Fila** — arraste os PDFs dos despachos (ou `.txt`). Opcionalmente preencha
-   os dados manualmente em cada um.
-3. **Processar** — IA (ou dados manuais) extrai processo, tipo, teor e destinatários.
-   Destinatários não encontrados no banco vão para uma etapa de revisão manual.
-4. **Resultado** — ofícios consolidados por destinatário, certidões por processo,
+1. **Configurar** — comarca, servidor responsável (assina "de ordem do" Promotor),
+   número inicial do ofício, ano e data da certidão.
+2. **Arquivos** — arraste os PDFs (despachos e/ou procedimentos). Opcionalmente
+   preencha os dados manualmente em cada um.
+3. **Processar** — a IA agrupa por procedimento e extrai os dados; destinatários
+   não encontrados no banco vão para uma etapa de revisão (já pré-preenchida).
+4. **Resultado** — ofícios consolidados por destinatário, certidões por procedimento,
    e download do **ZIP** com:
    - `1_oficios/` — `.docx` timbrados
    - `2_certidoes/` — `.docx` timbrados
