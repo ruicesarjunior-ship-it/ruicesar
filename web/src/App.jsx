@@ -391,6 +391,56 @@ function Modal(props) {
 
 function normChave(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g,"").trim(); }
 
+// ---- Importacao de destinatarios via CSV ----
+// Parser de uma linha CSV ciente de aspas (separador configuravel; aspas duplas escapam ").
+function parseLinhaCSV(line, delim) {
+  var out = [], cur = "", inq = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (inq) {
+      if (c === '"') { if (line[i+1] === '"') { cur += '"'; i++; } else inq = false; }
+      else cur += c;
+    } else {
+      if (c === '"') inq = true;
+      else if (c === delim) { out.push(cur); cur = ""; }
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+// Aceita ; ou , como separador. Colunas: Nome/Cargo; Instituicao/Orgao; Endereco; E-mail; [Referencia]
+function parseCSVDestinatarios(text) {
+  var linhas = String(text || "").replace(/\r/g, "").split("\n").filter(function(l){ return l.trim().length; });
+  if (linhas.length === 0) return [];
+  var delim = (linhas[0].split(";").length >= linhas[0].split(",").length) ? ";" : ",";
+  var rows = linhas.map(function(l){ return parseLinhaCSV(l, delim); });
+  // remove cabecalho se detectado
+  var h = ((rows[0][0]||"") + " " + (rows[0][1]||"")).toLowerCase();
+  if (h.indexOf("instit") !== -1 || h.indexOf("rgao") !== -1 || h.indexOf("orgao") !== -1 || (h.indexOf("nome") !== -1 && h.indexOf("mail") !== -1)) rows.shift();
+  return rows.map(function(c){
+    return { nomeCargo:(c[0]||"").trim(), orgao:(c[1]||"").trim(), endereco:(c[2]||"").trim(), email:(c[3]||"").trim() };
+  }).filter(function(r){ return r.orgao; });
+}
+
+function comarcaPorNome(nome) {
+  var n = normChave(nome);
+  if (n.indexOf("nova vicosa") !== -1) return "nova_vicosa";
+  if (n.indexOf("alcobaca") !== -1) return "alcobaca";
+  if (n.indexOf("prado") !== -1) return "prado";
+  return "todos";
+}
+
+// Separa "Rua X, n\u00ba Y, Bairro, 00000-000 Cidade - BA" em endereco + cepCidade.
+function splitEndereco(addr) {
+  addr = (addr || "").trim();
+  if (!addr) return { endereco:"", cepCidade:"" };
+  var m = addr.match(/^(.*?)[,\s\u2013-]*((?:CEP[:\s]*)?\d{2}\.?\d{3}-?\d{3}.*)$/i);
+  if (m) return { endereco: m[1].replace(/[,\s\u2013-]+$/,"").trim(), cepCidade: m[2].replace(/^[,\s]+/,"").trim() };
+  return { endereco: addr, cepCidade:"" };
+}
+
 export default function App() {
   var [screen, setScreen] = useState("loading");
   var [comarca, setComarca] = useState("prado");
@@ -409,6 +459,7 @@ export default function App() {
   var [modalDest, setModalDest] = useState(null);
   var [modalServ, setModalServ] = useState(null);
   var [modalManual, setModalManual] = useState(null);
+  var [modalImport, setModalImport] = useState(false);
   var [settings, setSettings] = useState({ key:"", model:"claude-sonnet-4-6", usarIA:true, promotor:"Rui César Farias dos Santos Júnior" });
   var [showSettings, setShowSettings] = useState(false);
   var fileRef = useRef();
@@ -433,6 +484,36 @@ export default function App() {
 
   async function salvarDest(lista) { setDestDB(lista); await sSet("mpba:dest", lista); }
   async function salvarServ(lista) { setServDB(lista); await sSet("mpba:serv", lista); }
+
+  // Importa destinatarios a partir de linhas {nomeCargo,orgao,endereco,email}.
+  // Evita duplicar pelo nome do orgao (ja existente no banco).
+  async function importarDestinatarios(rows) {
+    var existentes = {};
+    destDB.forEach(function(d){ existentes[normChave(d.nome)] = 1; });
+    var add = [], dup = 0;
+    rows.forEach(function(r){
+      var k = normChave(r.orgao);
+      if (!k || existentes[k]) { dup++; return; }
+      existentes[k] = 1;
+      var sp = splitEndereco(r.endereco);
+      add.push({ id:uid(), comarca:comarcaPorNome(r.orgao), chave:normChave(r.orgao).slice(0,40), nome:r.orgao, vocativo:"", nomeAutoridade:r.nomeCargo||"", endereco:sp.endereco, cepCidade:sp.cepCidade, email:r.email||"", tipo:"institucional" });
+    });
+    if (add.length) await salvarDest(destDB.concat(add));
+    return { add:add.length, dup:dup };
+  }
+
+  async function importarListaPrado() {
+    try {
+      var resp = await fetch(import.meta.env.BASE_URL + "destinatarios_prado.csv");
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      var txt = await resp.text();
+      var rows = parseCSVDestinatarios(txt);
+      var res = await importarDestinatarios(rows);
+      alert("Importação concluída: " + res.add + " adicionados" + (res.dup ? ", " + res.dup + " já existiam (ignorados)." : "."));
+    } catch (e) {
+      alert("Não foi possível importar a lista: " + (e && e.message ? e.message : e));
+    }
+  }
 
   function mudarComarca(c) {
     setComarca(c);
@@ -669,9 +750,15 @@ export default function App() {
       settingsModal,
       React.createElement("div", { style:{ maxWidth:820, margin:"0 auto", padding:"20px 14px" } },
         React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 } },
-          React.createElement("h2", { style:{ margin:0, color:C.azul, fontSize:16 } }, "Banco de Destinatários - " + COMARCAS[comarca].label),
-          React.createElement("button", { style:btn(C.verde), onClick:function() { setModalDest({ dest:{ id:uid(), comarca:comarca, chave:"", nome:"", vocativo:"", nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" }, isNew:true }); } }, "+ Novo")
+          React.createElement("h2", { style:{ margin:0, color:C.azul, fontSize:15 } }, "Banco de Destinatários - " + COMARCAS[comarca].label),
+          React.createElement("div", { style:{ display:"flex", gap:6, flexWrap:"wrap" } },
+            React.createElement("button", { style:btn("#4a90d9",{fontSize:12,padding:"7px 10px"}), onClick:importarListaPrado }, "Importar lista Prado"),
+            React.createElement("button", { style:btn("#555",{fontSize:12,padding:"7px 10px"}), onClick:function(){ setModalImport(true); } }, "Importar CSV"),
+            React.createElement("button", { style:btn(C.verde,{fontSize:12,padding:"7px 10px"}), onClick:function() { setModalDest({ dest:{ id:uid(), comarca:comarca, chave:"", nome:"", vocativo:"", nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" }, isNew:true }); } }, "+ Novo")
+          )
         ),
+        React.createElement("div", { style:{ fontSize:11, color:"#888", marginBottom:10 } }, "Mostrando os desta comarca + os marcados como \"Todas\". Itens de Prado/Alcobaça/Nova Viçosa são classificados automaticamente; órgãos estaduais/federais ficam em \"Todas\"."),
+        modalImport && React.createElement(ModalImport, { onClose:function(){ setModalImport(false); }, onImport:async function(txt){ var rows=parseCSVDestinatarios(txt); if(rows.length===0){ alert("Nenhuma linha válida encontrada. Verifique o formato."); return; } var res=await importarDestinatarios(rows); setModalImport(false); alert("Importação concluída: " + res.add + " adicionados" + (res.dup?", " + res.dup + " já existiam.":".")); } }),
         filtrados.length === 0 && React.createElement("div", { style:Object.assign({}, C.card, { textAlign:"center", color:"#888", padding:32 }) }, "Nenhum destinatário cadastrado para " + COMARCAS[comarca].label + "."),
         filtrados.map(function(d) {
           return React.createElement("div", { key:d.id, style:Object.assign({}, C.card, { display:"flex", alignItems:"center", gap:10, padding:"12px 16px" }) },
@@ -1031,6 +1118,19 @@ function ModalServ(props) {
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:18 } },
       React.createElement("button", { style:btnOut({flex:1}), onClick:onClose }, "Cancelar"),
       React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ if(!form.nome||!form.cargo){alert("Preencha nome e cargo.");return;} onSave(form); } }, "Salvar")
+    )
+  );
+}
+
+function ModalImport(props) {
+  var [txt, setTxt] = useState("");
+  return React.createElement(Modal, null,
+    React.createElement("h3", { style:{ margin:"0 0 6px", color:C.azul } }, "Importar destinatários (CSV)"),
+    React.createElement("p", { style:{ margin:"0 0 12px", fontSize:12, color:"#777" } }, "Cole as linhas no formato: Nome/Cargo; Instituição/Órgão; Endereço; E-mail. Aceita separador ; ou , e cabeçalho opcional. Duplicados (mesmo órgão) são ignorados."),
+    React.createElement("textarea", { style:Object.assign({},C.input,{minHeight:180,resize:"vertical",fontFamily:"monospace",fontSize:12}), value:txt, onChange:function(e){setTxt(e.target.value);}, placeholder:'"Coordenação";"CRAS de Prado";"";"cras@exemplo.com"' }),
+    React.createElement("div", { style:{ display:"flex", gap:10, marginTop:16 } },
+      React.createElement("button", { style:btnOut({flex:1}), onClick:props.onClose }, "Cancelar"),
+      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ props.onImport(txt); } }, "Importar")
     )
   );
 }
