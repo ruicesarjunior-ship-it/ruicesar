@@ -681,7 +681,7 @@ export default function App() {
       if (bytes) {
         try {
           var blob = await montarDocx(gerarBodyOficio({ dest:g.dest, itens:g.itens, numOficio:g.numOficio, assunto:g.assunto, promotor:promotor, promotoriaCidade:cidade, emailResp:emailResp, servNome:servNome, servCargo:servCargo }), bytes);
-          arquivos.push({ nome:nomeDocx, blob:blob, tipo:"oficio" });
+          arquivos.push({ nome:nomeDocx, blob:blob, tipo:"oficio", procs:g.itens.map(function(x){ return x.numProc; }) });
         } catch(e) { console.error(e); }
       }
       var emlData = gerarEml({ dest:g.dest, numOficio:g.numOficio, promotoriaEmail:emailResp, promotoria:promotoria, servNome:servNome, servCargo:servCargo });
@@ -694,7 +694,7 @@ export default function App() {
         try {
           var blobC = await montarDocx(gerarBodyCertidao({ numProc:cert.numProc, tipo:cert.tipo, expedicoes:cert.exps, data:cfg.data, nomeServ:servNome, cargoServ:servCargo, matServ:servAtual.matricula, promotoria:promotoria, cidade:cidade }), bytes);
           var nomeSafeCert = cert.numProc.replace(/[^a-zA-Z0-9]/g,"_").slice(0,40);
-          arquivos.push({ nome:"Certidao_" + nomeSafeCert + ".docx", blob:blobC, tipo:"certidao" });
+          arquivos.push({ nome:"Certidao_" + nomeSafeCert + ".docx", blob:blobC, tipo:"certidao", proc:cert.numProc });
         } catch(e) {}
       }
     }
@@ -712,15 +712,26 @@ export default function App() {
     setProgresso({ msg:"Preparando...", atual:0, total:1 });
     var zip = new JSZip();
     var p1 = zip.folder("1_oficios"), p2 = zip.folder("2_certidoes"), p3 = zip.folder("3_emails_outlook");
+    // Subpastas por procedimento (para o servidor juntar nos autos): cada pasta
+    // recebe copias de TODOS os oficios que citam aquele procedimento + a certidao.
+    var pProc = p1.folder("por_procedimento");
+    function safeNum(n){ return String(n).replace(/[^0-9A-Za-z.]/g,"_"); }
     var arquivos = await gerarArquivos();
     for (var i = 0; i < arquivos.length; i++) {
       var arq = arquivos[i];
       var buf = await arq.blob.arrayBuffer();
-      if (arq.tipo === "oficio") p1.file(arq.nome, buf);
-      else if (arq.tipo === "certidao") p2.file(arq.nome, buf);
+      if (arq.tipo === "oficio") {
+        p1.file(arq.nome, buf);
+        (arq.procs || []).forEach(function(np){ pProc.folder(safeNum(np)).file(arq.nome, buf); });
+      }
+      else if (arq.tipo === "certidao") {
+        p2.file(arq.nome, buf);
+        if (arq.proc) pProc.folder(safeNum(arq.proc)).file(arq.nome, buf);
+      }
       else if (arq.tipo === "eml") p3.file(arq.nome, buf);
       else zip.file(arq.nome, buf);
     }
+    pProc.file("LEIA-ME.txt", "Cada subpasta tem o numero de um procedimento e contem copias de TODOS os oficios que o citam (mais a certidao), para juntar nos respectivos autos. Os oficios para envio estao na pasta 1_oficios (um por destinatario).");
     p3.file("LEIA-ME.txt", "Abrir .eml com duplo clique -> Outlook abre preenchido -> Anexar docx + PDFs -> Enviar.");
     setProgresso({ msg:"Empacotando ZIP...", atual:1, total:1 });
     var blobZip = await zip.generateAsync({ type:"blob" });

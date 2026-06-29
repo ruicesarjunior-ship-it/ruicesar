@@ -89,7 +89,10 @@ modo imagem da IA.
    não encontrados no banco vão para uma etapa de revisão (já pré-preenchida).
 4. **Resultado** — ofícios consolidados por destinatário, certidões por procedimento,
    e download do **ZIP** com:
-   - `1_oficios/` — `.docx` timbrados
+   - `1_oficios/` — `.docx` timbrados (um por destinatário, para envio)
+     - `1_oficios/por_procedimento/<nº>/` — subpasta por procedimento com cópias
+       de **todos os ofícios que o citam + a certidão**, para o servidor juntar
+       nos respectivos autos
    - `2_certidoes/` — `.docx` timbrados
    - `3_emails_outlook/` — `.eml` (duplo clique abre no Outlook preenchido)
    - `0_CHECKLIST.txt`
