@@ -260,15 +260,35 @@ function anthropicHeaders() {
 }
 
 async function anthropicMessages(opts) {
-  if (!API.key) throw new Error("Chave da API Anthropic não configurada.");
-  var r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: anthropicHeaders(),
-    body: JSON.stringify({ model: API.model, max_tokens: opts.max_tokens || 4000, messages: [{ role: "user", content: opts.content }] })
-  });
-  var d = await r.json();
+  if (!API.key) throw new Error("Chave da API Anthropic não configurada. Vá em Config e cole sua chave sk-ant-...");
+  // Tempo-limite proprio (alem do AbortController externo), para nunca ficar travado.
+  var ctrl = new AbortController();
+  var to = setTimeout(function(){ ctrl.abort(); }, opts.timeoutMs || 240000);
+  if (opts.signal) {
+    if (opts.signal.aborted) ctrl.abort();
+    else opts.signal.addEventListener("abort", function(){ ctrl.abort(); });
+  }
+  var r;
+  try {
+    r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: anthropicHeaders(),
+      body: JSON.stringify({ model: API.model, max_tokens: opts.max_tokens || 4000, messages: [{ role: "user", content: opts.content }] }),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if (e && e.name === "AbortError") {
+      if (opts.signal && opts.signal.aborted) throw new Error("Processamento cancelado.");
+      throw new Error("A IA demorou demais para responder e o tempo esgotou. Dicas: envie menos PDFs por vez (ou um procedimento por vez), confira sua conexão e a chave da API, e tente de novo.");
+    }
+    throw new Error("Falha de conexão com a API da Anthropic. Verifique a internet e a chave (Config). Detalhe: " + (e && e.message ? e.message : e));
+  } finally {
+    clearTimeout(to);
+  }
+  var d;
+  try { d = await r.json(); } catch (e) { throw new Error("Resposta inválida da API (HTTP " + r.status + ")."); }
   if (d.error) throw new Error("API erro: " + (d.error.message || JSON.stringify(d.error)));
-  if (!d.content || !d.content[0]) throw new Error("API sem conteúdo. HTTP: " + r.status);
+  if (!d.content || !d.content[0]) throw new Error("API sem conteúdo (HTTP " + r.status + ").");
   return d.content.filter(function(b){ return b.type === "text"; }).map(function(b){ return b.text; }).join("\n");
 }
 
@@ -302,6 +322,16 @@ async function extrairTextoPDF(file) {
   return texto.trim();
 }
 
+// Recorta texto grande preservando INÍCIO (capa/nº do procedimento) e FIM (despachos
+// mais recentes — o último despacho costuma estar no fim do procedimento).
+function recortarTexto(t, lim) {
+  t = t || "";
+  if (t.length <= lim) return t;
+  var ini = Math.floor(lim * 0.30);
+  var fim = lim - ini;
+  return t.slice(0, ini) + "\n\n[...trecho intermediário omitido por tamanho...]\n\n" + t.slice(t.length - fim);
+}
+
 function extrairJSON(raw) {
   try { return JSON.parse(raw.trim()); } catch(e1) {}
   var limpo = raw.replace(/```json/g,"").replace(/```/g,"").trim();
@@ -323,7 +353,8 @@ var PROMPT_EXTRACAO =
 "- O teor de cada diligência deve corresponder EXATAMENTE ao que o despacho mandou pedir ÀQUELE destinatário. NUNCA repita o mesmo teor para destinatários diferentes e NUNCA misture o comando de um destinatário no de outro.\n" +
 "- Use a natureza do pedido para conferir o destinatário correto. Exemplos de pistas: boletim de ocorrência (BO), inquérito policial, situação processual de investigado, registro de ocorrência => DELEGACIA DE POLÍCIA. Relatório psicossocial/acompanhamento de família, medidas de proteção a criança/adolescente => CONSELHO TUTELAR. Acompanhamento socioassistencial, CRAS/CREAS, visita domiciliar social, idoso/vulnerável => CREAS ou CRAS. Atendimento/prontuário médico => SECRETARIA DE SAÚDE/HOSPITAL.\n" +
 "- Se o despacho determinar VÁRIAS coisas ao MESMO destinatário, junte tudo em um único teor para aquele destinatário.\n" +
-"- Se um pedido não indicar destinatário claro, use orgao \"Destinatário a identificar\".\n\n" +
+"- Se um pedido não indicar destinatário claro, use orgao \"Destinatário a identificar\".\n" +
+"- PESSOAS FÍSICAS: se a diligência for dirigida a uma PESSOA (vítima, denunciante, requerente, investigado, testemunha, representante, munícipe), INCLUA-A normalmente como uma diligência. Coloque o nome da pessoa em orgao (e também em nomeAutoridade); se o nome não constar, use orgao \"Usuário/pessoa a identificar\" e descreva no teor de quem se trata (ex.: \"a vítima mencionada às fls. X\"). NÃO invente nome, endereço, CPF nem e-mail.\n\n" +
 "Para cada diligência forneça:\n" +
 "- orgao (instituição destinatária), vocativo (ex.: \"A Sua Excelência o Senhor\", \"A Sua Senhoria o Senhor\", \"Ao Ilustre Conselho Tutelar\", \"Ao Coordenador do CREAS\"), nomeAutoridade (nome da pessoa, se houver), endereco, cepCidade, email (o que estiver disponível; vazio se não houver);\n" +
 "- assunto: sintético, poucas palavras (ex.: \"Solicita informações.\", \"Requisita documentos.\");\n" +
@@ -334,7 +365,7 @@ var PROMPT_EXTRACAO =
 "Se um procedimento não tiver diligência clara, use \"diligencias\":[{\"orgao\":\"Destinatário a identificar\",\"assunto\":\"\",\"teor\":\"\"}].";
 
 // Envia todos os arquivos numa unica chamada e retorna o array de procedimentos.
-async function extrairProcedimentos(files, onProgresso) {
+async function extrairProcedimentos(files, onProgresso, signal) {
   var content = [];
   for (var i = 0; i < files.length; i++) {
     var f = files[i];
@@ -343,7 +374,7 @@ async function extrairProcedimentos(files, onProgresso) {
     if (/\.pdf$/i.test(f.name)) {
       try { texto = await extrairTextoPDF(f); } catch (e) { texto = ""; }
       if (texto && texto.replace(/\s/g, "").length > 40) {
-        content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + texto.slice(0, 80000) });
+        content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + recortarTexto(texto, 90000) });
       } else {
         // PDF escaneado/sem texto -> envia como documento (imagem)
         var b64 = await lerArquivoBase64(f);
@@ -352,12 +383,12 @@ async function extrairProcedimentos(files, onProgresso) {
       }
     } else {
       var t = await lerArquivoTexto(f);
-      content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + t.slice(0, 80000) });
+      content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + recortarTexto(t, 90000) });
     }
   }
   content.push({ type:"text", text: PROMPT_EXTRACAO });
-  if (onProgresso) onProgresso("IA analisando os documentos...");
-  var raw = await anthropicMessages({ max_tokens: 8000, content: content });
+  if (onProgresso) onProgresso("IA analisando os documentos... (pode levar 1 a 2 minutos)");
+  var raw = await anthropicMessages({ max_tokens: 8000, content: content, signal: signal, timeoutMs: 240000 });
   var arr = extrairJSON(raw);
   if (!Array.isArray(arr)) arr = [arr];
   return arr;
@@ -463,6 +494,7 @@ export default function App() {
   var [settings, setSettings] = useState({ key:"", model:"claude-sonnet-4-6", usarIA:true, promotor:"Rui César Farias dos Santos Júnior" });
   var [showSettings, setShowSettings] = useState(false);
   var fileRef = useRef();
+  var abortRef = useRef(null);
 
   useEffect(function() {
     (async function() {
@@ -591,6 +623,14 @@ export default function App() {
     }
   }
 
+  function cancelarProcessamento() {
+    if (abortRef.current) { try { abortRef.current.abort(); } catch(e) {} }
+    abortRef.current = null;
+    setProgresso({ msg:"", atual:0, total:0 });
+    setErroProc("Processamento cancelado.");
+    setStep("fila");
+  }
+
   async function processarFila() {
     if (!cfg.numInicial) { alert("Informe o número inicial do ofício."); return; }
     if (!servAtual) { alert("Selecione um servidor responsável."); return; }
@@ -606,12 +646,14 @@ export default function App() {
     });
     var arquivosIA = fila.filter(function(f){ return !(f.manual && f.manual.numProc); }).map(function(f){ return f.file; });
 
+    var ctrl = new AbortController();
+    abortRef.current = ctrl;
     var brutos = manualProcs.slice();
     try {
       if (arquivosIA.length > 0) {
         if (settings.usarIA && settings.key) {
           setProgresso({ msg:"Preparando documentos...", atual:0, total:0 });
-          var extraidos = await extrairProcedimentos(arquivosIA, function(msg){ setProgresso({ msg:msg, atual:0, total:0 }); });
+          var extraidos = await extrairProcedimentos(arquivosIA, function(msg){ setProgresso({ msg:msg, atual:0, total:0 }); }, ctrl.signal);
           brutos = brutos.concat(extraidos);
         } else {
           // sem IA: cria procedimentos vazios a partir do nome do arquivo (para preenchimento manual)
@@ -626,6 +668,8 @@ export default function App() {
     } catch (e) {
       setErroProc(String(e && e.message ? e.message : e));
       setStep("fila");
+    } finally {
+      abortRef.current = null;
     }
   }
 
@@ -912,11 +956,7 @@ export default function App() {
       ),
 
       // PROCESSANDO
-      step === "processando" && React.createElement("div", { style:Object.assign({},C.card,{textAlign:"center",padding:48}) },
-        React.createElement("div", { style:{ fontSize:40, marginBottom:14 } }, "[ ... ]"),
-        React.createElement("h2", { style:{ color:C.azul, marginBottom:8 } }, "Processando..."),
-        React.createElement("div", { style:{ color:"#666", marginBottom:20, fontSize:14 } }, progresso.msg)
-      ),
+      step === "processando" && React.createElement(TelaProcessando, { msg:progresso.msg, onCancel:cancelarProcessamento }),
 
       // RESOLUCAO
       step === "resolucao" && React.createElement(TelaResolucao, {
@@ -1133,6 +1173,24 @@ function ModalServ(props) {
   );
 }
 
+function TelaProcessando(props) {
+  var [seg, setSeg] = useState(0);
+  useEffect(function() {
+    var t = setInterval(function(){ setSeg(function(s){ return s + 1; }); }, 1000);
+    return function(){ clearInterval(t); };
+  }, []);
+  var min = Math.floor(seg/60), s = seg % 60;
+  var tempo = (min ? min + "m " : "") + s + "s";
+  return React.createElement("div", { style:Object.assign({},C.card,{textAlign:"center",padding:40}) },
+    React.createElement("div", { style:{ fontSize:40, marginBottom:14 } }, "[ ... ]"),
+    React.createElement("h2", { style:{ color:C.azul, marginBottom:8 } }, "Processando..."),
+    React.createElement("div", { style:{ color:"#666", marginBottom:6, fontSize:14 } }, props.msg || "Trabalhando..."),
+    React.createElement("div", { style:{ color:"#999", fontSize:13, marginBottom:18 } }, "Tempo: " + tempo + (seg > 20 ? " — análises de procedimentos grandes podem levar 1 a 2 minutos." : "")),
+    seg > 150 && React.createElement("div", { style:{ background:"#fffbeb", border:"1px solid #f5e090", borderRadius:8, padding:"8px 12px", marginBottom:14, fontSize:12, color:"#7a5c00" } }, "Está demorando bastante. Se não concluir, cancele e tente com menos PDFs por vez (ex.: um procedimento por vez)."),
+    React.createElement("button", { style:btnOut(), onClick:props.onCancel }, "Cancelar")
+  );
+}
+
 function ModalImport(props) {
   var [txt, setTxt] = useState("");
   return React.createElement(Modal, null,
@@ -1155,13 +1213,14 @@ function TelaResolucao(props) {
   function atualizar(id, upd) { setItens(function(prev){ return prev.map(function(x){ return x.id===id?Object.assign({},x,upd):x; }); }); }
   return React.createElement("div", null,
     React.createElement("div", { style:{ background:"#fffbeb", border:"1px solid #f5e090", borderRadius:12, padding:16, marginBottom:14 } },
-      React.createElement("h3", { style:{ margin:"0 0 6px", color:"#7a5c00", fontSize:14 } }, pendentes.length + " destinatário(s) não encontrado(s) no banco"),
-      React.createElement("p", { style:{ margin:0, fontSize:12, color:"#665500" } }, "Confira/complete os dados de cada um. A IA já preencheu o que conseguiu extrair.")
+      React.createElement("h3", { style:{ margin:"0 0 6px", color:"#7a5c00", fontSize:14 } }, "Identificação manual — " + pendentes.length + " destinatário(s)/usuário(s) não localizado(s) no banco"),
+      React.createElement("p", { style:{ margin:0, fontSize:12, color:"#665500" } }, "Para cada item abaixo está indicado QUEM é (texto do despacho) e em QUAL procedimento. Confira/complete os dados — a IA já preencheu o que conseguiu. Pessoas físicas (vítima, denunciante, investigado etc.) também aparecem aqui para você cadastrar.")
     ),
     itens.map(function(item, idx) {
       return React.createElement("div", { key:item.id, style:Object.assign({},C.card) },
-        React.createElement("div", { style:{ fontWeight:"bold", color:"#0a2440", fontSize:14, marginBottom:4 } }, (idx+1) + ". \"" + item.textoOriginal + "\""),
-        React.createElement("div", { style:{ fontSize:11, color:"#888", marginBottom:10 } }, "Procedimento " + (item.numProc||"?") + (item.teor ? " — " + item.teor.slice(0,120) + (item.teor.length>120?"...":"") : "")),
+        React.createElement("div", { style:{ display:"inline-block", background:"#e8f0fe", color:C.azul, padding:"2px 8px", borderRadius:6, fontSize:11, fontWeight:"bold", marginBottom:6 } }, "Procedimento: " + (item.numProc||"?")),
+        React.createElement("div", { style:{ fontWeight:"bold", color:"#0a2440", fontSize:14, marginBottom:4 } }, "Quem: \"" + item.textoOriginal + "\""),
+        item.teor && React.createElement("div", { style:{ fontSize:11, color:"#888", marginBottom:10 } }, "Diligência: " + item.teor.slice(0,160) + (item.teor.length>160?"...":"")),
         React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 } },
           [["Órgão / Nome *","nome","Delegacia de Polícia de ..."],["Vocativo","vocativo","A Sua Excelência o Senhor"],["Nome da autoridade","nomeAutoridade",""],["Email","email","email@dominio.com"],["Endereço","endereco","Av. ..., nº, bairro"],["CEP / Cidade","cepCidade","00000-000 Cidade - BA"],["Palavra-chave","chave","como aparece no despacho"]].map(function(field) {
             return React.createElement("div", { key:field[1], style: field[1]==="nome"?{gridColumn:"1/-1"}:null },
