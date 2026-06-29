@@ -220,6 +220,13 @@ function extrairTimbrePar(docXml) {
   var fim = docXml.indexOf("</w:drawing>", s);
   if (fim === -1) return "";
   var drawing = docXml.slice(s, fim + "</w:drawing>".length);
+  // Ancora o timbre no canto superior ESQUERDO da PÁGINA (e não da coluna/margem),
+  // para que ocupe a folha inteira da esquerda à direita, na sua altura padrão.
+  drawing = drawing
+    .replace(/(<wp:positionH\b[^>]*\brelativeFrom=")[^"]*(")/, "$1page$2")
+    .replace(/(<wp:positionV\b[^>]*\brelativeFrom=")[^"]*(")/, "$1page$2")
+    .replace(/(<wp:positionH\b[\s\S]*?<wp:posOffset>)[^<]*(<\/wp:posOffset>)/, function(_, a, b){ return a + "0" + b; })
+    .replace(/(<wp:positionV\b[\s\S]*?<wp:posOffset>)[^<]*(<\/wp:posOffset>)/, function(_, a, b){ return a + "0" + b; });
   return "<w:p><w:pPr><w:spacing w:after=\"0\"/></w:pPr><w:r><w:rPr><w:noProof/></w:rPr>" + drawing + "</w:r></w:p>";
 }
 
