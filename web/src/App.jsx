@@ -37,12 +37,19 @@ async function sSet(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
 
-// Comarcas
+// Comarcas. promotoria = nome especifico por comarca (usado em e-mail/oficio);
+// secretaria = cabecalho (a direita) da Secretaria Processual usado nas certidoes.
 const COMARCAS = {
-  prado:       { label: "Prado/BA",       cidade: "Prado",       email: "prado@mpba.mp.br",       promotoria: "Promotorias de Justiça de Prado e Nova Viçosa" },
-  nova_vicosa: { label: "Nova Viçosa/BA", cidade: "Nova Viçosa", email: "novavicosa@mpba.mp.br",  promotoria: "Promotorias de Justiça de Prado e Nova Viçosa" },
-  alcobaca:    { label: "Alcobaça/BA",    cidade: "Alcobaça",    email: "alcobaca@mpba.mp.br",    promotoria: "Promotoria de Justiça de Alcobaça" },
+  prado:       { label: "Prado/BA",       cidade: "Prado",       email: "prado@mpba.mp.br",       promotoria: "Promotoria de Justiça de Prado",
+                 secretaria: ["Secretaria Processual e Administrativa – PJ Prado", "Rua Presidente Kennedy, n/s, Centro – Prado/BA", "CEP.: 45.980-000, Telefones: (73) 3298-1993"] },
+  nova_vicosa: { label: "Nova Viçosa/BA", cidade: "Nova Viçosa", email: "novavicosa@mpba.mp.br",  promotoria: "Promotoria de Justiça de Nova Viçosa",
+                 secretaria: ["Secretaria Processual e Administrativa – PJ Nova Viçosa"] },
+  alcobaca:    { label: "Alcobaça/BA",    cidade: "Alcobaça",    email: "alcobaca@mpba.mp.br",    promotoria: "Promotoria de Justiça de Alcobaça",
+                 secretaria: ["Secretaria Processual e Administrativa – PJ Alcobaça"] },
 };
+
+// Tipo do procedimento por extenso (para o cabecalho da certidao)
+var TIPO_EXTENSO = { NF:"Notícia de Fato", PA:"Procedimento Administrativo", IC:"Inquérito Civil", PP:"Procedimento Preparatório", IP:"Inquérito Policial", TCO:"Termo Circunstanciado de Ocorrência" };
 
 // Destinatarios iniciais (campos: vocativo, nomeAutoridade, nome=orgao, endereco, cepCidade, email)
 const DEST_INICIAIS = [
@@ -105,12 +112,13 @@ function xmlVazio() {
   return "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/></w:pPr></w:p>";
 }
 
-// Item numerado de diligencia (referencia em negrito + teor normal)
-function xmlItemDiligencia(n, numProc, tipo, teor) {
+// Item numerado de diligencia (referencia em negrito + teor + prazo proprio)
+function xmlItemDiligencia(n, numProc, tipo, teor, prazo) {
   var font = "<w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\" w:cs=\"Times New Roman\"/>";
   var x = "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/><w:spacing w:before=\"40\" w:after=\"40\"/><w:ind w:left=\"720\" w:hanging=\"360\"/><w:jc w:val=\"both\"/></w:pPr>";
   x += "<w:r><w:rPr>" + font + "<w:b/><w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">" + n + ". Referência " + encXml(numProc) + (tipo ? " (" + encXml(tipo) + ")" : "") + ": </w:t></w:r>";
-  x += "<w:r><w:rPr>" + font + "<w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">" + encXml(teor) + "</w:t></w:r></w:p>";
+  x += "<w:r><w:rPr>" + font + "<w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">" + encXml(teor) + ". </w:t></w:r>";
+  x += "<w:r><w:rPr>" + font + "<w:b/><w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">Prazo de resposta: " + encXml(prazo || "15 (quinze) dias") + ".</w:t></w:r></w:p>";
   return x;
 }
 
@@ -147,12 +155,12 @@ function gerarBodyOficio(o) {
   x += xmlVazio();
 
   if (itens.length === 1) {
-    x += xmlPar("Cumprimentando-o cordialmente e de ordem do Excelentíssimo Senhor Doutor " + promotor + ", Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar " + itens[0].teor + ", no prazo de 15 (quinze) dias.", { size:22, firstLine:708 });
+    x += xmlPar("Cumprimentando-o cordialmente e de ordem do Excelentíssimo Senhor Doutor " + promotor + ", Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar " + itens[0].teor + ", no prazo de " + (itens[0].prazo || "15 (quinze) dias") + ".", { size:22, firstLine:708 });
   } else {
-    x += xmlPar("Cumprimentando-o cordialmente e de ordem do Excelentíssimo Senhor Doutor " + promotor + ", Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar o atendimento das diligências abaixo relacionadas, no prazo de 15 (quinze) dias:", { size:22, firstLine:708 });
+    x += xmlPar("Cumprimentando-o cordialmente e de ordem do Excelentíssimo Senhor Doutor " + promotor + ", Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar o atendimento das diligências abaixo relacionadas, observado, para cada uma, o respectivo prazo de resposta:", { size:22, firstLine:708 });
     x += xmlVazio();
     for (var i = 0; i < itens.length; i++) {
-      x += xmlItemDiligencia(i+1, itens[i].numProc, itens[i].tipo, itens[i].teor);
+      x += xmlItemDiligencia(i+1, itens[i].numProc, itens[i].tipo, itens[i].teor, itens[i].prazo);
     }
   }
   x += xmlVazio();
@@ -166,42 +174,55 @@ function gerarBodyOficio(o) {
   return x;
 }
 
-// Certidao de expedicao (juntada aos autos)
+// Certidao de cumprimento de despacho (juntada aos autos), nos modelos do MPBA.
+// tipoCertidao: "encaminhamento" | "reiteracao" | "prazo_vencido".
+// Os IDs MP (despacho, oficio, comprovacao de e-mail) so existem apos a juntada
+// no sistema, por isso saem como "ID MP ______" para o servidor preencher.
 function gerarBodyCertidao(o) {
   var numProc = o.numProc;
-  var tipo = o.tipo;
-  var expedicoes = o.expedicoes;
+  var tipoProc = o.tipo;
+  var tipoCert = o.tipoCertidao || "encaminhamento";
+  var exps = o.expedicoes || [];
   var data = o.data;
+  var cidade = o.cidade;
+  var secretaria = o.secretaria || [];
   var nomeServ = o.nomeServ;
   var cargoServ = o.cargoServ;
   var matServ = o.matServ;
-  var promotoria = o.promotoria;
-  var cidade = o.cidade;
+  var prazoMax = o.prazoMax || "30 (trinta) dias";
   var x = "";
-  x += xmlPar(numProc, { bold:true, size:24, align:"center", sa:60 });
-  x += xmlVazio();
-  x += xmlPar("CERTIDÃO DE EXPEDIÇÃO", { bold:true, size:24, align:"center", sa:80 });
-  x += xmlVazio();
-  x += xmlPar("Certifico que, em " + data + ", foram expedidos os ofícios abaixo em cumprimento ao despacho exarado nos presentes autos do " + tipo + ", dando-se notificação aos seguintes destinatários:", { size:22, firstLine:708, sa:80 });
-  x += xmlVazio();
-  for (var i = 0; i < expedicoes.length; i++) {
-    x += xmlItemSimples(i+1, expedicoes[i].nome + " — Ofício nº " + expedicoes[i].numOficio);
+
+  // Cabecalho da Secretaria (a direita), abaixo do timbre
+  secretaria.forEach(function(l){ x += xmlPar(l, { size:18, align:"right" }); });
+  if (secretaria.length) x += xmlVazio();
+
+  x += xmlPar((TIPO_EXTENSO[tipoProc] || "Procedimento") + " nº " + numProc, { size:22, align:"center" });
+  x += xmlPar("CERTIDÃO", { bold:true, size:22, align:"center", sa:120 });
+
+  var plural = exps.length !== 1;
+  var verbo = (tipoCert === "reiteracao")
+    ? (plural ? "reiterei os seguintes ofícios" : "reiterei o seguinte ofício")
+    : (plural ? "encaminhei os seguintes ofícios" : "encaminhei o seguinte ofício");
+  x += xmlPar("CERTIFICO que, em cumprimento ao despacho ministerial acostado ao ID MP ______, " + verbo + ":", { size:22, firstLine:708, sa:80 });
+
+  for (var i = 0; i < exps.length; i++) {
+    x += xmlPar("Ofício nº " + exps[i].numOficio + " (ID MP ______), destinado a " + exps[i].nome + ", conforme comprovação de envio e entrega de e-mail, ID MP ______ e ______.", { size:22, firstLine:708, sa:40 });
   }
   x += xmlVazio();
-  x += xmlPar("Para constar, lavro a presente certidão.", { size:22, firstLine:708, sa:80 });
-  x += xmlVazio();
-  x += xmlPar(cidade + ", data da assinatura eletrônica.", { size:22, align:"right", sa:240 });
-  x += xmlVazio();
-  x += xmlPar("(assinado eletronicamente)", { size:22, align:"center" });
-  x += xmlPar(nomeServ, { bold:true, size:22, align:"center" });
-  x += xmlPar(cargoServ + (matServ && matServ !== "--" ? " — Matrícula nº " + matServ : ""), { size:22, align:"center" });
-  return x;
-}
 
-function xmlItemSimples(n, texto) {
-  var font = "<w:rFonts w:ascii=\"Times New Roman\" w:hAnsi=\"Times New Roman\" w:cs=\"Times New Roman\"/>";
-  var x = "<w:p><w:pPr><w:pStyle w:val=\"Standard\"/><w:spacing w:before=\"40\" w:after=\"40\"/><w:ind w:left=\"720\" w:hanging=\"360\"/><w:jc w:val=\"both\"/></w:pPr>";
-  x += "<w:r><w:rPr>" + font + "<w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/></w:rPr><w:t xml:space=\"preserve\">" + n + ". " + encXml(texto) + "</w:t></w:r></w:p>";
+  if (tipoCert === "prazo_vencido") {
+    x += xmlPar("Certifico, ainda, que o prazo máximo para resposta é de " + prazoMax + ".", { size:22, firstLine:708, sa:60 });
+    x += xmlPar("Certifico, por fim, que o presente Documento se encontra com prazo de conclusão vencido, conforme informação contida no cabeçalho do visualizador do IDEA.", { size:22, firstLine:708, sa:60 });
+    x += xmlPar("Por fim, faço concluso os presentes autos ao(à) Promotor(a) de Justiça para as providências cabíveis.", { size:22, firstLine:708, sa:60 });
+  } else {
+    x += xmlPar("Assim, remeto os autos ao Armário Virtual da Secretaria Processual e Administrativa a fim de aguardar o transcurso do prazo assinalado para resposta aos ofícios.", { size:22, firstLine:708, sa:60 });
+  }
+  x += xmlPar("O referido é verdade e dou fé.", { size:22, firstLine:708, sa:200 });
+
+  x += xmlPar(cidade + "/BA, " + data + ".", { size:22, align:"center", sa:200 });
+  x += xmlPar(nomeServ, { size:22, align:"center" });
+  x += xmlPar(cargoServ, { size:22, align:"center" });
+  if (matServ && matServ !== "--") x += xmlPar("Mat. " + matServ, { size:22, align:"center" });
   return x;
 }
 
@@ -243,13 +264,13 @@ function gerarEml(o) {
   var d = o.dest;
   var numOficio = o.numOficio;
   var promotoriaEmail = o.promotoriaEmail;
-  var promotoria = o.promotoria;
+  var promotoria = o.promotoria;   // especifica da comarca (ex.: "Promotoria de Justiça de Prado")
   var servNome = o.servNome;
   var servCargo = o.servCargo;
   var assunto = "Ofício nº " + numOficio + " - " + promotoria;
   var corpo = "<p>" + (d.vocativo || "Prezado(a)") + ",</p>"
     + "<p>Encaminhamos em anexo o <strong>Ofício nº " + numOficio + "</strong>, expedido pela " + promotoria + ", com diligências a serem cumpridas. Seguem também as cópias dos respectivos procedimentos.</p>"
-    + "<p><strong>Prazo: 15 (quinze) dias.</strong></p>"
+    + "<p><strong>Os prazos de resposta estão indicados no próprio ofício, podendo variar conforme cada procedimento.</strong> Solicitamos a observância do prazo correspondente a cada diligência.</p>"
     + "<p>Respeitosamente,<br>(assinado eletronicamente)<br><strong>" + servNome + "</strong><br>" + servCargo + "<br>" + promotoria + "</p>";
   var bd = "boundary_" + Date.now();
   var eml = "MIME-Version: 1.0\r\nFrom: " + promotoriaEmail + "\r\n" + (d.email ? "To: " + d.email + "\r\n" : "") + "Subject: " + assunto + "\r\nContent-Type: multipart/mixed; boundary=\"" + bd + "\"\r\n\r\n--" + bd + "\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" + corpo + "\r\n\r\n--" + bd + "--\r\n";
@@ -365,11 +386,13 @@ var PROMPT_EXTRACAO =
 "Para cada diligência forneça:\n" +
 "- orgao (instituição destinatária), vocativo (ex.: \"A Sua Excelência o Senhor\", \"A Sua Senhoria o Senhor\", \"Ao Ilustre Conselho Tutelar\", \"Ao Coordenador do CREAS\"), nomeAutoridade (nome da pessoa, se houver), endereco, cepCidade, email (o que estiver disponível; vazio se não houver);\n" +
 "- assunto: sintético, poucas palavras (ex.: \"Solicita informações.\", \"Requisita documentos.\");\n" +
-"- teor: frase objetiva que completa \"sirvo-me do presente para solicitar ___\" (ex.: \"informações sobre o andamento do BO nº 220187/2026 e a situação processual do investigado\"). NÃO inclua o prazo.\n\n" +
-"tipo do procedimento: PA, IP, NF, IC, PP ou TCO.\n\n" +
+"- teor: frase objetiva que completa \"sirvo-me do presente para solicitar ___\" (ex.: \"informações sobre o andamento do BO nº 220187/2026 e a situação processual do investigado\"). NÃO inclua o prazo no teor.\n" +
+"- prazo: o prazo de resposta determinado no despacho PARA AQUELE destinatário, por extenso no formato número + (extenso) + dias (ex.: \"15 (quinze) dias\", \"10 (dez) dias\", \"5 (cinco) dias úteis\"). Se o despacho não indicar prazo, use \"15 (quinze) dias\".\n\n" +
+"tipo do procedimento: PA, IP, NF, IC, PP ou TCO.\n" +
+"tipoCertidao do procedimento (qual certidão de cumprimento será lavrada): \"encaminhamento\" (expedição/encaminhamento normal dos ofícios) | \"reiteracao\" (o despacho determina REITERAR ofícios — \"reitere-se\", \"renove-se\", ou reiteração por ausência de resposta) | \"prazo_vencido\" (o procedimento está com prazo de conclusão vencido / determina-se providência por prazo vencido). Em dúvida, use \"encaminhamento\".\n\n" +
 "Responda SOMENTE com um array JSON, sem markdown e sem explicações, no formato:\n" +
-"[{\"numProc\":\"...\",\"tipo\":\"NF\",\"diligencias\":[{\"orgao\":\"...\",\"vocativo\":\"...\",\"nomeAutoridade\":\"\",\"endereco\":\"\",\"cepCidade\":\"\",\"email\":\"\",\"assunto\":\"...\",\"teor\":\"...\"}]}]\n" +
-"Se um procedimento não tiver diligência clara, use \"diligencias\":[{\"orgao\":\"Destinatário a identificar\",\"assunto\":\"\",\"teor\":\"\"}].";
+"[{\"numProc\":\"...\",\"tipo\":\"NF\",\"tipoCertidao\":\"encaminhamento\",\"diligencias\":[{\"orgao\":\"...\",\"vocativo\":\"...\",\"nomeAutoridade\":\"\",\"endereco\":\"\",\"cepCidade\":\"\",\"email\":\"\",\"assunto\":\"...\",\"teor\":\"...\",\"prazo\":\"15 (quinze) dias\"}]}]\n" +
+"Se um procedimento não tiver diligência clara, use \"diligencias\":[{\"orgao\":\"Destinatário a identificar\",\"assunto\":\"\",\"teor\":\"\",\"prazo\":\"15 (quinze) dias\"}].";
 
 // Envia todos os arquivos numa unica chamada e retorna o array de procedimentos.
 async function extrairProcedimentos(files, onProgresso, signal) {
@@ -606,6 +629,7 @@ export default function App() {
     brutos.forEach(function(b) {
       var numProc = b.numProc || "Sem número";
       var tipo = b.tipo || "PA";
+      var tipoCertidao = b.tipoCertidao || "encaminhamento";
       // compatibilidade: aceita formato antigo (destinatarios + teor unico) e novo (diligencias)
       var dils = b.diligencias;
       if (!dils) {
@@ -616,7 +640,7 @@ export default function App() {
       }
       dils.forEach(function(dil) {
         var r = resolverDest(dil);
-        var base = { numProc:numProc, tipo:tipo, assunto:dil.assunto || "", teor:dil.teor || "" };
+        var base = { numProc:numProc, tipo:tipo, tipoCertidao:tipoCertidao, assunto:dil.assunto || "", teor:dil.teor || "", prazo:dil.prazo || "15 (quinze) dias" };
         if (r) resolvidas.push(Object.assign(base, { dest:r }));
         else pendentesLocal.push(Object.assign({ id:uid(), textoOriginal: dil.orgao || "Destinatário", ia:dil }, base));
       });
@@ -648,7 +672,7 @@ export default function App() {
     var manualProcs = [];
     fila.forEach(function(f) {
       if (f.manual && f.manual.numProc) {
-        manualProcs.push({ numProc:f.manual.numProc, tipo:f.manual.tipo || "PA", diligencias:(f.manual.destinatarios || []).map(function(t){ return { orgao:t, assunto:f.manual.assunto || "", teor:f.manual.teor || "" }; }) });
+        manualProcs.push({ numProc:f.manual.numProc, tipo:f.manual.tipo || "PA", tipoCertidao:f.manual.tipoCertidao || "encaminhamento", diligencias:(f.manual.destinatarios || []).map(function(t){ return { orgao:t, assunto:f.manual.assunto || "", teor:f.manual.teor || "", prazo:f.manual.prazo || "15 (quinze) dias" }; }) });
       }
     });
     var arquivosIA = fila.filter(function(f){ return !(f.manual && f.manual.numProc); }).map(function(f){ return f.file; });
@@ -690,7 +714,7 @@ export default function App() {
     diligencias.forEach(function(d) {
       var key = destKey(d.dest);
       if (!porDest[key]) porDest[key] = { dest:d.dest, itens:[], assuntos:[] };
-      porDest[key].itens.push({ numProc:d.numProc, tipo:d.tipo, teor:d.teor });
+      porDest[key].itens.push({ numProc:d.numProc, tipo:d.tipo, teor:d.teor, prazo:d.prazo });
       if (d.assunto && porDest[key].assuntos.indexOf(d.assunto) === -1) porDest[key].assuntos.push(d.assunto);
     });
     var grupos = Object.keys(porDest).map(function(k){ return porDest[k]; });
@@ -701,7 +725,7 @@ export default function App() {
     // certidoes por procedimento
     var certsPorProc = {};
     diligencias.forEach(function(d) {
-      if (!certsPorProc[d.numProc]) certsPorProc[d.numProc] = { numProc:d.numProc, tipo:d.tipo, exps:[] };
+      if (!certsPorProc[d.numProc]) certsPorProc[d.numProc] = { numProc:d.numProc, tipo:d.tipo, tipoCertidao:d.tipoCertidao || "encaminhamento", prazoMax:d.prazo || "15 (quinze) dias", exps:[] };
       var g = grupos.find(function(g){ return destKey(g.dest) === destKey(d.dest); });
       if (g && !certsPorProc[d.numProc].exps.some(function(e){ return e.numOficio === g.numOficio; })) {
         certsPorProc[d.numProc].exps.push({ nome:d.dest.nome, numOficio:g.numOficio });
@@ -717,6 +741,7 @@ export default function App() {
     var comarcaData = COMARCAS[comarca];
     var cidade = comarcaData.cidade;
     var promotoria = comarcaData.promotoria;
+    var secretaria = comarcaData.secretaria || [];
     var emailResp = comarcaData.email;
     var promotor = settings.promotor || "Rui César Farias dos Santos Júnior";
     var servNome = servAtual.nome;
@@ -743,7 +768,7 @@ export default function App() {
       setProgresso({ msg:"Gerando certidão " + (k+1) + "/" + certs.length, atual:grupos.length+k+1, total:grupos.length+certs.length });
       if (bytes) {
         try {
-          var blobC = await montarDocx(gerarBodyCertidao({ numProc:cert.numProc, tipo:cert.tipo, expedicoes:cert.exps, data:cfg.data, nomeServ:servNome, cargoServ:servCargo, matServ:servAtual.matricula, promotoria:promotoria, cidade:cidade }), bytes);
+          var blobC = await montarDocx(gerarBodyCertidao({ numProc:cert.numProc, tipo:cert.tipo, tipoCertidao:cert.tipoCertidao, prazoMax:cert.prazoMax, expedicoes:cert.exps, data:cfg.data, nomeServ:servNome, cargoServ:servCargo, matServ:servAtual.matricula, secretaria:secretaria, cidade:cidade }), bytes);
           var nomeSafeCert = cert.numProc.replace(/[^a-zA-Z0-9]/g,"_").slice(0,40);
           arquivos.push({ nome:"Certidao_" + nomeSafeCert + ".docx", blob:blobC, tipo:"certidao", proc:cert.numProc });
         } catch(e) {}
@@ -977,9 +1002,9 @@ export default function App() {
             var novaLista = destDB.concat(unicos.map(function(r){ return { id:uid(), comarca:comarca, chave:r.chave||normChave(r.nome).slice(0,24), nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", tipo:"institucional" }; }));
             salvarDest(novaLista);
           }
-          // cada pendente vira uma diligencia resolvida (mantendo seu proprio teor)
+          // cada pendente vira uma diligencia resolvida (mantendo seu proprio teor/prazo/tipo de certidao)
           var novasDilig = extras.filter(function(r){ return r.nome; }).map(function(r){
-            return { numProc:r.numProc, tipo:r.tipo, assunto:r.assunto||"", teor:r.teor||"", dest:{ nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) } };
+            return { numProc:r.numProc, tipo:r.tipo, tipoCertidao:r.tipoCertidao||"encaminhamento", assunto:r.assunto||"", teor:r.teor||"", prazo:r.prazo||"15 (quinze) dias", dest:{ nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) } };
           });
           var todas = procs.concat(novasDilig);
           setProcs(todas);
@@ -1014,12 +1039,19 @@ export default function App() {
           })
         ),
         React.createElement("div", { style:C.card },
-          React.createElement("h3", { style:{ margin:"0 0 10px", color:C.azul, fontSize:14 } }, "Certidões de Expedição"),
-          React.createElement("div", { style:{ fontSize:12, color:"#666", marginBottom:10 } }, "Juntar aos autos após expedição."),
+          React.createElement("h3", { style:{ margin:"0 0 10px", color:C.azul, fontSize:14 } }, "Certidões de Cumprimento de Despacho"),
+          React.createElement("div", { style:{ fontSize:12, color:"#666", marginBottom:10 } }, "Juntar aos autos após a expedição. Confira o TIPO de certidão de cada procedimento (a IA sugere, mas você pode trocar). Os números de ID MP saem em branco (______) para você preencher no sistema."),
           resultado.certs.map(function(cert, i) {
             return React.createElement("div", { key:i, style:{ border:"1px solid #dff0d8", borderRadius:8, padding:12, marginBottom:8, background:"#fafff5" } },
-              React.createElement("div", { style:{ fontWeight:"bold", color:"#2d5a1b", fontSize:13 } }, cert.numProc + " (" + cert.tipo + ")"),
-              cert.exps.map(function(exp, j) { return React.createElement("div", { key:j, style:{ fontSize:11, color:"#444" } }, (j+1) + ". " + exp.nome + " — Ofício nº " + exp.numOficio); })
+              React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap" } },
+                React.createElement("div", { style:{ fontWeight:"bold", color:"#2d5a1b", fontSize:13 } }, cert.numProc + " (" + cert.tipo + ")"),
+                React.createElement("select", { value:cert.tipoCertidao || "encaminhamento", style:Object.assign({},C.input,{width:"auto",fontSize:12,padding:"4px 8px"}), onChange:function(e){ var v=e.target.value; setResultado(function(prev){ var certs=prev.certs.map(function(c,idx){ return idx===i?Object.assign({},c,{tipoCertidao:v}):c; }); return Object.assign({},prev,{certs:certs}); }); } },
+                  React.createElement("option", { value:"encaminhamento" }, "Encaminhamento"),
+                  React.createElement("option", { value:"reiteracao" }, "Reiteração"),
+                  React.createElement("option", { value:"prazo_vencido" }, "Encaminhamento - Prazo Vencido")
+                )
+              ),
+              cert.exps.map(function(exp, j) { return React.createElement("div", { key:j, style:{ fontSize:11, color:"#444", marginTop:2 } }, (j+1) + ". " + exp.nome + " — Ofício nº " + exp.numOficio); })
             );
           })
         ),
@@ -1094,6 +1126,8 @@ function ModalManual(props) {
   var [tipo, setTipo] = useState(m.tipo || "PA");
   var [assunto, setAssunto] = useState(m.assunto || "");
   var [teor, setTeor] = useState(m.teor || "");
+  var [prazo, setPrazo] = useState(m.prazo || "15 (quinze) dias");
+  var [tipoCertidao, setTipoCertidao] = useState(m.tipoCertidao || "encaminhamento");
   var [sel, setSel] = useState((m.destinatarios || []).filter(function(t){ return typeof t === "string" && lista.some(function(d){ return d.chave===t; }); }));
   var [livre, setLivre] = useState((m.destinatarios || []).filter(function(t){ return typeof t === "string" && !lista.some(function(d){ return d.chave===t; }); }).join(", "));
 
@@ -1105,7 +1139,7 @@ function ModalManual(props) {
     var livres = livre.split(",").map(function(s){return s.trim();}).filter(Boolean);
     var dests = sel.concat(livres);
     if (dests.length === 0) dests = ["Destinatário a identificar"];
-    props.onSave({ numProc:numProc.trim(), tipo:tipo, assunto:assunto.trim(), teor:teor.trim(), destinatarios:dests });
+    props.onSave({ numProc:numProc.trim(), tipo:tipo, tipoCertidao:tipoCertidao, assunto:assunto.trim(), teor:teor.trim(), prazo:prazo.trim() || "15 (quinze) dias", destinatarios:dests });
   }
   return React.createElement(Modal, null,
     React.createElement("h3", { style:{ margin:"0 0 4px", color:C.azul } }, "Dados do procedimento"),
@@ -1117,6 +1151,14 @@ function ModalManual(props) {
       ),
       React.createElement("div", null, React.createElement("label", { style:C.label }, "Assunto (sintético)"), React.createElement("input", { style:C.input, value:assunto, onChange:function(e){setAssunto(e.target.value);}, placeholder:"Ex: Solicita informações." })),
       React.createElement("div", null, React.createElement("label", { style:C.label }, "Teor (completa \"solicitar ___\")"), React.createElement("textarea", { style:Object.assign({},C.input,{minHeight:64,resize:"vertical"}), value:teor, onChange:function(e){setTeor(e.target.value);}, placeholder:"Ex: informações sobre eventual registro de ocorrência relacionado aos fatos" })),
+      React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 } },
+        React.createElement("div", null, React.createElement("label", { style:C.label }, "Prazo de resposta"), React.createElement("input", { style:C.input, value:prazo, onChange:function(e){setPrazo(e.target.value);}, placeholder:"Ex: 15 (quinze) dias" })),
+        React.createElement("div", null, React.createElement("label", { style:C.label }, "Tipo de certidão"), React.createElement("select", { style:C.input, value:tipoCertidao, onChange:function(e){setTipoCertidao(e.target.value);} },
+          React.createElement("option", { value:"encaminhamento" }, "Encaminhamento"),
+          React.createElement("option", { value:"reiteracao" }, "Reiteração"),
+          React.createElement("option", { value:"prazo_vencido" }, "Encam. - Prazo Vencido")
+        ))
+      ),
       React.createElement("div", null,
         React.createElement("label", { style:C.label }, "Destinatários (banco da comarca)"),
         lista.length === 0 && React.createElement("div", { style:{ fontSize:12, color:"#999" } }, "Nenhum destinatário no banco desta comarca."),
@@ -1244,7 +1286,7 @@ function TelaResolucao(props) {
     }),
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:8 } },
       React.createElement("button", { style:btnOut(), onClick:onPular }, "Pular e gerar assim mesmo"),
-      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,numProc:x.numProc,tipo:x.tipo,assunto:x.assunto,teor:x.teor}); })); } }, "Confirmar e gerar ofícios")
+      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,numProc:x.numProc,tipo:x.tipo,tipoCertidao:x.tipoCertidao,assunto:x.assunto,teor:x.teor,prazo:x.prazo}); })); } }, "Confirmar e gerar ofícios")
     )
   );
 }
