@@ -354,7 +354,9 @@ async function extrairTextoPDF(file) {
 function recortarTexto(t, lim) {
   t = t || "";
   if (t.length <= lim) return t;
-  var ini = Math.floor(lim * 0.30);
+  // 45% do INÍCIO (capa/autuação/qualificação das partes — onde estão os nomes)
+  // e 55% do FIM (despachos mais recentes).
+  var ini = Math.floor(lim * 0.45);
   var fim = lim - ini;
   return t.slice(0, ini) + "\n\n[...trecho intermediário omitido por tamanho...]\n\n" + t.slice(t.length - fim);
 }
@@ -379,9 +381,12 @@ var PROMPT_EXTRACAO =
 "REGRA CRÍTICA DE ATRIBUIÇÃO (leia com atenção):\n" +
 "- O teor de cada diligência deve corresponder EXATAMENTE ao que o despacho mandou pedir ÀQUELE destinatário. NUNCA repita o mesmo teor para destinatários diferentes e NUNCA misture o comando de um destinatário no de outro.\n" +
 "- Use a natureza do pedido para conferir o destinatário correto. Exemplos de pistas: boletim de ocorrência (BO), inquérito policial, situação processual de investigado, registro de ocorrência => DELEGACIA DE POLÍCIA. Relatório psicossocial/acompanhamento de família, medidas de proteção a criança/adolescente => CONSELHO TUTELAR. Acompanhamento socioassistencial, CRAS/CREAS, visita domiciliar social, idoso/vulnerável => CREAS ou CRAS. Atendimento/prontuário médico => SECRETARIA DE SAÚDE/HOSPITAL.\n" +
-"- Se o despacho determinar VÁRIAS coisas ao MESMO destinatário, junte tudo em um único teor para aquele destinatário.\n" +
-"- Se um pedido não indicar destinatário claro, use orgao \"Destinatário a identificar\".\n" +
-"- PESSOAS FÍSICAS: se a diligência for dirigida a uma PESSOA (vítima, denunciante, requerente, investigado, testemunha, representante, munícipe), INCLUA-A normalmente como uma diligência. Coloque o nome da pessoa em orgao (e também em nomeAutoridade); se o nome não constar, use orgao \"Usuário/pessoa a identificar\" e descreva no teor de quem se trata (ex.: \"a vítima mencionada às fls. X\"). NÃO invente nome, endereço, CPF nem e-mail.\n\n" +
+"- Se o despacho determinar VÁRIAS coisas ao MESMO destinatário, junte tudo em um único teor para aquele destinatário.\n\n" +
+"IDENTIFICAÇÃO DO NOME REAL (muito importante): para CADA diligência, descubra QUEM é o destinatário pelo NOME, procurando em TODO o material fornecido — não só no despacho, mas também na CAPA/AUTUAÇÃO, na QUALIFICAÇÃO das partes, na petição/representação inicial, no boletim de ocorrência e em peças anteriores.\n" +
+"- Quando o despacho usar um papel genérico (ex.: \"oficie-se/notifique-se o(a) NOTICIANTE / DENUNCIANTE / VÍTIMA / REPRESENTANTE / COMUNICANTE / REQUERENTE / INVESTIGADO / AVERIGUADO / NOTICIADO\"), LOCALIZE o nome próprio dessa pessoa na qualificação dos autos e use-o em orgao e em nomeAutoridade, com endereco, cepCidade, email e (se útil) o vínculo entre parênteses, ex.: \"João da Silva (noticiante)\".\n" +
+"- Quando mandar oficiar um ÓRGÃO, use o nome completo do órgão.\n" +
+"- Use \"Destinatário a identificar\" APENAS como ÚLTIMO recurso, quando, mesmo após procurar em todo o material, realmente não houver como saber o nome. Nesse caso, no teor, ESCREVA o papel e onde procurar (ex.: \"notificar o denunciante — qualificação não localizada nos autos enviados\"), para o servidor saber quem buscar.\n" +
+"- NÃO invente nome, endereço, CPF, e-mail ou telefone: só informe o que constar nos autos.\n\n" +
 "Para cada diligência forneça:\n" +
 "- orgao (instituição destinatária), vocativo (ex.: \"A Sua Excelência o Senhor\", \"A Sua Senhoria o Senhor\", \"Ao Ilustre Conselho Tutelar\", \"Ao Coordenador do CREAS\"), nomeAutoridade (nome da pessoa, se houver), endereco, cepCidade, email (o que estiver disponível; vazio se não houver);\n" +
 "- assunto: sintético, poucas palavras (ex.: \"Solicita informações.\", \"Requisita documentos.\");\n" +
@@ -403,7 +408,7 @@ async function extrairProcedimentos(files, onProgresso, signal) {
     if (/\.pdf$/i.test(f.name)) {
       try { texto = await extrairTextoPDF(f); } catch (e) { texto = ""; }
       if (texto && texto.replace(/\s/g, "").length > 40) {
-        content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + recortarTexto(texto, 90000) });
+        content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + recortarTexto(texto, 130000) });
       } else {
         // PDF escaneado/sem texto -> envia como documento (imagem)
         var b64 = await lerArquivoBase64(f);
@@ -412,7 +417,7 @@ async function extrairProcedimentos(files, onProgresso, signal) {
       }
     } else {
       var t = await lerArquivoTexto(f);
-      content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + recortarTexto(t, 90000) });
+      content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + recortarTexto(t, 130000) });
     }
   }
   content.push({ type:"text", text: PROMPT_EXTRACAO });
