@@ -132,6 +132,7 @@ function gerarBodyOficio(o) {
   var emailResp = o.emailResp;
   var servNome = o.servNome;
   var servCargo = o.servCargo;
+  var ehPromotor = o.assinante === "promotor";   // promotor assina (não "de ordem")
   var x = "";
 
   x += xmlPar("Ofício nº " + numOficio, { size:22 });
@@ -153,10 +154,13 @@ function gerarBodyOficio(o) {
   x += xmlPar("Referência: " + refs + ".", { size:22 });
   x += xmlVazio();
 
+  var introPrefix = ehPromotor
+    ? "Cumprimentando-o cordialmente, no uso de minhas atribuições legais, na qualidade de Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar "
+    : "Cumprimentando-o cordialmente e de ordem do Excelentíssimo Senhor Doutor " + promotor + ", Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar ";
   if (itens.length === 1) {
-    x += xmlPar("Cumprimentando-o cordialmente e de ordem do Excelentíssimo Senhor Doutor " + promotor + ", Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar " + itens[0].teor + ", no prazo de " + (itens[0].prazo || "15 (quinze) dias") + ".", { size:22, firstLine:708 });
+    x += xmlPar(introPrefix + itens[0].teor + ", no prazo de " + (itens[0].prazo || "15 (quinze) dias") + ".", { size:22, firstLine:708 });
   } else {
-    x += xmlPar("Cumprimentando-o cordialmente e de ordem do Excelentíssimo Senhor Doutor " + promotor + ", Promotor de Justiça de " + promotoriaCidade + ", sirvo-me do presente para solicitar o atendimento das diligências abaixo relacionadas, observado, para cada uma, o respectivo prazo de resposta:", { size:22, firstLine:708 });
+    x += xmlPar(introPrefix + "o atendimento das diligências abaixo relacionadas, observado, para cada uma, o respectivo prazo de resposta:", { size:22, firstLine:708 });
     x += xmlVazio();
     for (var i = 0; i < itens.length; i++) {
       x += xmlItemDiligencia(i+1, itens[i].numProc, itens[i].tipo, itens[i].teor, itens[i].prazo);
@@ -168,8 +172,13 @@ function gerarBodyOficio(o) {
   x += xmlPar("Respeitosamente,", { size:22 });
   x += xmlVazio();
   x += xmlPar("(assinado eletronicamente)", { size:22, align:"center" });
-  x += xmlPar(servNome, { size:22, align:"center" });
-  x += xmlPar(servCargo, { size:22, align:"center" });
+  if (ehPromotor) {
+    x += xmlPar(promotor, { size:22, align:"center" });
+    x += xmlPar("Promotor de Justiça de " + promotoriaCidade, { size:22, align:"center" });
+  } else {
+    x += xmlPar(servNome, { size:22, align:"center" });
+    x += xmlPar(servCargo, { size:22, align:"center" });
+  }
   return x;
 }
 
@@ -513,7 +522,7 @@ export default function App() {
   var [servDB, setServDB] = useState([]);
   var [servAtual, setServAtual] = useState(null);
   var [step, setStep] = useState("config");
-  var [cfg, setCfg] = useState({ numInicial:"", ano: String(new Date().getFullYear()), data: new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}) });
+  var [cfg, setCfg] = useState({ numInicial:"", ano: String(new Date().getFullYear()), data: new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}), assinante:"servidor" });
   var [fila, setFila] = useState([]);
   var [procs, setProcs] = useState([]);
   var [pendentes, setPendentes] = useState([]);
@@ -760,7 +769,7 @@ export default function App() {
       var nomeDocx = "Oficio_" + g.numOficio.replace(/[^0-9.]/g,"_") + "_" + nomeSafe + ".docx";
       if (bytes) {
         try {
-          var blob = await montarDocx(gerarBodyOficio({ dest:g.dest, itens:g.itens, numOficio:g.numOficio, assunto:g.assunto, promotor:promotor, promotoriaCidade:cidade, emailResp:emailResp, servNome:servNome, servCargo:servCargo }), bytes);
+          var blob = await montarDocx(gerarBodyOficio({ dest:g.dest, itens:g.itens, numOficio:g.numOficio, assunto:g.assunto, promotor:promotor, promotoriaCidade:cidade, emailResp:emailResp, servNome:servNome, servCargo:servCargo, assinante:cfg.assinante || "servidor" }), bytes);
           arquivos.push({ nome:nomeDocx, blob:blob, tipo:"oficio", procs:g.itens.map(function(x){ return x.numProc; }) });
         } catch(e) { console.error(e); }
       }
@@ -930,7 +939,15 @@ export default function App() {
             React.createElement("button", { style:btn(C.azul, { padding:"4px 10px", fontSize:11 }), onClick:function(){setScreen("servidores");} }, "Gerenciar")
           ),
           React.createElement("div", { style:{ marginTop:4 } }, "Promotor: ", React.createElement("strong", null, settings.promotor)),
-          React.createElement("div", { style:{ marginTop:4 } }, "Promotoria: ", React.createElement("strong", null, COMARCAS[comarca].promotoria))
+          React.createElement("div", { style:{ marginTop:4 } }, "Promotoria: ", React.createElement("strong", null, COMARCAS[comarca].promotoria)),
+          React.createElement("div", { style:{ marginTop:10 } },
+            React.createElement("label", { style:C.label }, "Quem assina os ofícios?"),
+            React.createElement("select", { style:C.input, value:cfg.assinante || "servidor", onChange:function(e){ var v=e.target.value; setCfg(function(p){ return Object.assign({},p,{assinante:v}); }); } },
+              React.createElement("option", { value:"servidor" }, "Servidor (de ordem do Promotor)"),
+              React.createElement("option", { value:"promotor" }, "Promotor de Justiça (" + settings.promotor + ")")
+            ),
+            React.createElement("div", { style:{ fontSize:11, color:"#888", marginTop:4 } }, cfg.assinante === "promotor" ? "A redação fica em 1ª pessoa (sem \"de ordem\") e a assinatura é do Promotor." : "A redação usa \"de ordem do Promotor\" e a assinatura é do servidor.")
+          )
         ),
         React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 } },
           React.createElement("div", null, React.createElement("label", { style:C.label }, "Nº inicial do ofício *"), React.createElement("input", { style:C.input, value:cfg.numInicial, onChange:function(e){setCfg(function(p){return Object.assign({},p,{numInicial:e.target.value});});}, placeholder:"Ex: 95" })),
