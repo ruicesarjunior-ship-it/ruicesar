@@ -515,6 +515,14 @@ function splitEndereco(addr) {
   return { endereco: addr, cepCidade:"" };
 }
 
+// Redacao do teor quando o oficio e encaminhado a um orgao "abrangente" (ex.: Prefeitura,
+// em nome do Prefeito), para que este direcione ao setor competente.
+function teorEncaminhamento(orgaoOriginal, teorOriginal) {
+  var alvo = (orgaoOriginal && orgaoOriginal.trim() && orgaoOriginal.trim().toLowerCase().indexOf("identificar") === -1) ? orgaoOriginal.trim() : "o setor/\u00f3rg\u00e3o municipal competente";
+  var base = (teorOriginal && teorOriginal.trim()) ? teorOriginal.trim() : "o atendimento da dilig\u00eancia determinada nos autos";
+  return "a Vossa Excel\u00eancia que determine ao \u00f3rg\u00e3o competente \u2014 " + alvo + " \u2014 o atendimento da seguinte provid\u00eancia: " + base + ", com posterior remessa da resposta a esta Promotoria de Justi\u00e7a";
+}
+
 export default function App() {
   var [screen, setScreen] = useState("loading");
   var [comarca, setComarca] = useState("prado");
@@ -1014,19 +1022,29 @@ export default function App() {
       // RESOLUCAO
       step === "resolucao" && React.createElement(TelaResolucao, {
         pendentes:pendentes,
+        destDB:destDB,
+        comarca:comarca,
         onConfirmar:function(extras) {
-          // salva no banco os marcados
-          var novosParaSalvar = extras.filter(function(r){ return r.salvar && r.nome; });
+          // salva no banco os marcados (exceto os que foram redirecionados via outro orgao)
+          var novosParaSalvar = extras.filter(function(r){ return r.salvar && r.nome && !r.via; });
           if (novosParaSalvar.length > 0) {
             var vistos = {};
             var unicos = novosParaSalvar.filter(function(r){ var k=normChave(r.nome); if(vistos[k]) return false; vistos[k]=1; return true; });
             var novaLista = destDB.concat(unicos.map(function(r){ return { id:uid(), comarca:comarca, chave:r.chave||normChave(r.nome).slice(0,24), nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", tipo:"institucional" }; }));
             salvarDest(novaLista);
           }
-          // cada pendente vira uma diligencia resolvida (mantendo seu proprio teor/prazo/tipo de certidao)
-          var novasDilig = extras.filter(function(r){ return r.nome; }).map(function(r){
+          // cada pendente vira uma diligencia resolvida
+          var novasDilig = extras.filter(function(r){ return r.nome || r.via; }).map(function(r){
+            if (r.via) {
+              // Encaminhar via orgao abrangente (ex.: Prefeitura) -> em nome da autoridade, que direciona ao setor competente
+              var org = destDB.find(function(d){ return d.chave===r.via && (d.comarca===comarca||d.comarca==="todos"); }) || destDB.find(function(d){ return d.chave===r.via; });
+              if (org) {
+                return { numProc:r.numProc, tipo:r.tipo, tipoCertidao:r.tipoCertidao||"encaminhamento", assunto:r.assunto||"", teor: teorEncaminhamento(r.originalNome, r.teor), prazo:r.prazo||"15 (quinze) dias",
+                  dest:{ id:org.id, nome:org.nome, vocativo:org.vocativo||"A Sua Excelência o Senhor", nomeAutoridade:org.nomeAutoridade||"", endereco:org.endereco||"", cepCidade:org.cepCidade||"", email:org.email||"", chave:org.chave } };
+              }
+            }
             return { numProc:r.numProc, tipo:r.tipo, tipoCertidao:r.tipoCertidao||"encaminhamento", assunto:r.assunto||"", teor:r.teor||"", prazo:r.prazo||"15 (quinze) dias", dest:{ nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) } };
-          });
+          }).filter(Boolean);
           var todas = procs.concat(novasDilig);
           setProcs(todas);
           finalizar(todas);
@@ -1276,9 +1294,13 @@ function ModalImport(props) {
 
 function TelaResolucao(props) {
   var pendentes = props.pendentes; var onConfirmar = props.onConfirmar; var onPular = props.onPular;
+  var destDB = props.destDB || []; var comarca = props.comarca;
+  // Orgaos "abrangentes" disponiveis no banco (Prefeitura primeiro, depois os demais da comarca).
+  var coberturas = destDB.filter(function(d){ return d.comarca === comarca || d.comarca === "todos"; })
+    .sort(function(a,b){ var pa = normChave(a.nome).indexOf("prefeitura")!==-1?0:1; var pb = normChave(b.nome).indexOf("prefeitura")!==-1?0:1; return pa-pb; });
   var [itens, setItens] = useState(pendentes.map(function(p){
     var ia = p.ia || {};
-    return Object.assign({}, p, { salvar:true, form:{ nome: ia.orgao || p.textoOriginal || "", vocativo: ia.vocativo || "", nomeAutoridade: ia.nomeAutoridade || "", endereco: ia.endereco || "", cepCidade: ia.cepCidade || "", email: ia.email || "", chave: normChave(ia.orgao || p.textoOriginal || "").slice(0,24) } });
+    return Object.assign({}, p, { salvar:true, via:"", form:{ nome: ia.orgao || p.textoOriginal || "", vocativo: ia.vocativo || "", nomeAutoridade: ia.nomeAutoridade || "", endereco: ia.endereco || "", cepCidade: ia.cepCidade || "", email: ia.email || "", chave: normChave(ia.orgao || p.textoOriginal || "").slice(0,24) } });
   }));
   function atualizar(id, upd) { setItens(function(prev){ return prev.map(function(x){ return x.id===id?Object.assign({},x,upd):x; }); }); }
   return React.createElement("div", null,
@@ -1301,13 +1323,22 @@ function TelaResolucao(props) {
           React.createElement("div", { style:{ gridColumn:"1/-1", display:"flex", alignItems:"center", gap:8 } },
             React.createElement("input", { type:"checkbox", id:"salvar_"+item.id, checked:item.salvar, onChange:function(e){atualizar(item.id,{salvar:e.target.checked});} }),
             React.createElement("label", { htmlFor:"salvar_"+item.id, style:{ fontSize:13, color:"#555", cursor:"pointer" } }, "Salvar no banco para uso futuro")
+          ),
+          // Alternativa: encaminhar via orgao abrangente (so se nao conseguir os dados acima)
+          coberturas.length > 0 && React.createElement("div", { style:{ gridColumn:"1/-1", background:"#f5f0ff", border:"1px solid #e0d4ff", borderRadius:8, padding:"10px 12px", marginTop:4 } },
+            React.createElement("div", { style:{ fontSize:12, color:"#5b21b6", fontWeight:"bold", marginBottom:4 } }, "Não conseguiu o endereço? Encaminhar via órgão que abarca"),
+            React.createElement("div", { style:{ fontSize:11, color:"#6b21a8", marginBottom:8 } }, "Use só se não localizar os dados acima. O ofício irá em nome da autoridade do órgão escolhido (ex.: o Prefeito), pedindo que direcione ao setor competente — \"" + (item.form.nome || item.textoOriginal) + "\"."),
+            React.createElement("select", { style:C.input, value:item.via||"", onChange:function(e){ atualizar(item.id,{via:e.target.value}); } },
+              React.createElement("option", { value:"" }, "— Não encaminhar (vou preencher os dados acima) —"),
+              coberturas.map(function(c){ return React.createElement("option", { key:c.id, value:c.chave }, "Encaminhar via: " + c.nome + (c.email?"":" (sem e-mail no banco)")); })
+            )
           )
         )
       );
     }),
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:8 } },
       React.createElement("button", { style:btnOut(), onClick:onPular }, "Pular e gerar assim mesmo"),
-      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,numProc:x.numProc,tipo:x.tipo,tipoCertidao:x.tipoCertidao,assunto:x.assunto,teor:x.teor,prazo:x.prazo}); })); } }, "Confirmar e gerar ofícios")
+      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,via:x.via||"",originalNome:x.form.nome||x.textoOriginal||"",numProc:x.numProc,tipo:x.tipo,tipoCertidao:x.tipoCertidao,assunto:x.assunto,teor:x.teor,prazo:x.prazo}); })); } }, "Confirmar e gerar ofícios")
     )
   );
 }
