@@ -37,15 +37,14 @@ async function sSet(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
 
-// Comarcas. promotoria = nome especifico por comarca (usado em e-mail/oficio);
-// secretaria = cabecalho (a direita) da Secretaria Processual usado nas certidoes.
+// Comarcas. promotoriaCidade = sede da promotoria responsavel (Alcobaca pertence a
+// promotoria de Prado); promotoria/secretaria seguem essa sede. cidade = a comarca
+// em si (usada nos rotulos e na classificacao dos destinatarios).
+const SECRETARIA_PRADO = ["Secretaria Processual e Administrativa – PJ Prado", "Rua Presidente Kennedy, n/s, Centro – Prado/BA", "CEP.: 45.980-000, Telefones: (73) 3298-1993"];
 const COMARCAS = {
-  prado:       { label: "Prado/BA",       cidade: "Prado",       email: "prado@mpba.mp.br",       promotoria: "Promotoria de Justiça de Prado",
-                 secretaria: ["Secretaria Processual e Administrativa – PJ Prado", "Rua Presidente Kennedy, n/s, Centro – Prado/BA", "CEP.: 45.980-000, Telefones: (73) 3298-1993"] },
-  nova_vicosa: { label: "Nova Viçosa/BA", cidade: "Nova Viçosa", email: "novavicosa@mpba.mp.br",  promotoria: "Promotoria de Justiça de Nova Viçosa",
-                 secretaria: ["Secretaria Processual e Administrativa – PJ Nova Viçosa"] },
-  alcobaca:    { label: "Alcobaça/BA",    cidade: "Alcobaça",    email: "alcobaca@mpba.mp.br",    promotoria: "Promotoria de Justiça de Alcobaça",
-                 secretaria: ["Secretaria Processual e Administrativa – PJ Alcobaça"] },
+  prado:       { label: "Prado/BA",       cidade: "Prado",       promotoriaCidade: "Prado",       email: "prado@mpba.mp.br",      promotoria: "Promotoria de Justiça de Prado",       secretaria: SECRETARIA_PRADO },
+  nova_vicosa: { label: "Nova Viçosa/BA", cidade: "Nova Viçosa", promotoriaCidade: "Nova Viçosa", email: "novavicosa@mpba.mp.br", promotoria: "Promotoria de Justiça de Nova Viçosa", secretaria: ["Secretaria Processual e Administrativa – PJ Nova Viçosa"] },
+  alcobaca:    { label: "Alcobaça/BA",    cidade: "Alcobaça",    promotoriaCidade: "Prado",       email: "prado@mpba.mp.br",      promotoria: "Promotoria de Justiça de Prado",       secretaria: SECRETARIA_PRADO },
 };
 
 // Tipo do procedimento por extenso (para o cabecalho da certidao)
@@ -219,7 +218,7 @@ function gerarBodyCertidao(o) {
   }
   x += xmlPar("O referido é verdade e dou fé.", { size:22, firstLine:708, sa:200 });
 
-  x += xmlPar(cidade + "/BA, " + data + ".", { size:22, align:"center", sa:200 });
+  x += xmlPar(cidade + "/BA, data da assinatura eletrônica.", { size:22, align:"center", sa:200 });
   x += xmlPar(nomeServ, { size:22, align:"center" });
   x += xmlPar(cargoServ, { size:22, align:"center" });
   if (matServ && matServ !== "--") x += xmlPar("Mat. " + matServ, { size:22, align:"center" });
@@ -739,7 +738,7 @@ export default function App() {
     var bytes = cascaBytes;
     if (!bytes) { try { bytes = await carregarCasca(); if (bytes) setCascaBytes(bytes); } catch(e) {} }
     var comarcaData = COMARCAS[comarca];
-    var cidade = comarcaData.cidade;
+    var cidade = comarcaData.promotoriaCidade || comarcaData.cidade;  // sede da promotoria (Alcobaça -> Prado)
     var promotoria = comarcaData.promotoria;
     var secretaria = comarcaData.secretaria || [];
     var emailResp = comarcaData.email;
