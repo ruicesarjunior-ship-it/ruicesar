@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import JSZip from "jszip";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { cloudAtivo, cloudLerBanco, cloudEscreverBanco, cloudObservar } from "./cloud.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -620,6 +621,28 @@ export default function App() {
       }
       var sList = (sSaved || SERV_INICIAIS).map(function(s){ return Object.assign({ cargo:"" }, s); });
       var c = cSaved || "prado";
+      // Sincronizacao em nuvem (Firebase), se configurada: a nuvem e a fonte compartilhada.
+      if (cloudAtivo()) {
+        try {
+          var cloud = await cloudLerBanco();
+          if (cloud && Array.isArray(cloud.destinatarios)) {
+            dList = mesclarMaster(dList, cloud.destinatarios);
+            await sSet("mpba:dest", dList);
+            // se o local tinha itens que a nuvem nao tem, sobe a versao mesclada
+            if (dList.length !== cloud.destinatarios.length) { cloudEscreverBanco(dList).catch(function(){}); }
+          } else {
+            // nuvem vazia -> semeia com o banco atual
+            cloudEscreverBanco(dList).catch(function(){});
+          }
+          cloudObservar(function(remote){
+            if (remote && Array.isArray(remote.destinatarios)) {
+              var m = remote.destinatarios.map(migrarDest);
+              setDestDB(m); sSet("mpba:dest", m);
+            }
+          });
+        } catch(e) { console.warn("cloud sync:", e); }
+      }
+
       setDestDB(dList);
       setServDB(sList);
       setComarca(c);
@@ -629,7 +652,7 @@ export default function App() {
     })();
   }, []);
 
-  async function salvarDest(lista) { setDestDB(lista); await sSet("mpba:dest", lista); }
+  async function salvarDest(lista) { setDestDB(lista); await sSet("mpba:dest", lista); if (cloudAtivo()) cloudEscreverBanco(lista).catch(function(){}); }
   async function salvarServ(lista) { setServDB(lista); await sSet("mpba:serv", lista); }
 
   // Importa destinatarios a partir de linhas {nomeCargo,orgao,endereco,email}.
