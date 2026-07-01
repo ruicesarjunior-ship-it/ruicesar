@@ -295,8 +295,16 @@ function gerarEml(o) {
     + "<p>Encaminhamos em anexo o <strong>Ofício nº " + numOficio + "</strong>, expedido pela " + promotoria + ", com diligências a serem cumpridas. Seguem também as cópias dos respectivos procedimentos.</p>"
     + "<p><strong>Os prazos de resposta estão indicados no próprio ofício, podendo variar conforme cada procedimento.</strong> Solicitamos a observância do prazo correspondente a cada diligência.</p>"
     + "<p>Respeitosamente,<br>(assinado eletronicamente)<br><strong>" + servNome + "</strong><br>" + servCargo + "<br>" + promotoria + "</p>";
-  var bd = "boundary_" + Date.now();
-  var eml = "MIME-Version: 1.0\r\nFrom: " + promotoriaEmail + "\r\n" + (d.email ? "To: " + d.email + "\r\n" : "") + "Subject: " + assunto + "\r\nContent-Type: multipart/mixed; boundary=\"" + bd + "\"\r\n\r\n--" + bd + "\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" + corpo + "\r\n\r\n--" + bd + "--\r\n";
+  // X-Unsent: 1 faz o Outlook abrir o .eml como RASCUNHO editavel (compor/anexar/enviar),
+  // e nao como mensagem recebida (somente leitura). Formato simples de 1 parte (text/html).
+  var eml = "X-Unsent: 1\r\n"
+    + "MIME-Version: 1.0\r\n"
+    + (d.email ? "To: " + d.email + "\r\n" : "")
+    + "Subject: " + assunto + "\r\n"
+    + "Content-Type: text/html; charset=utf-8\r\n"
+    + "Content-Transfer-Encoding: 8bit\r\n"
+    + "\r\n"
+    + corpo + "\r\n";
   return { eml: eml, assunto: assunto };
 }
 
@@ -965,7 +973,7 @@ export default function App() {
       else zip.file(arq.nome, buf);
     }
     pProc.file("LEIA-ME.txt", "Cada subpasta tem o numero de um procedimento e contem copias de TODOS os oficios que o citam (mais a certidao), para juntar nos respectivos autos. Os oficios para envio estao na pasta 1_oficios (um por destinatario).");
-    p3.file("LEIA-ME.txt", "Abrir .eml com duplo clique -> Outlook abre preenchido -> Anexar docx + PDFs -> Enviar.");
+    p3.file("LEIA-ME.txt", "Duplo clique no .eml -> o Outlook abre uma MENSAGEM NOVA (rascunho) ja preenchida, pronta para editar. Anexe o docx do oficio + os PDFs e clique em Enviar.\r\n\r\nSe o arquivo abrir em outro programa (ou como mensagem so-leitura, sem deixar anexar): clique com o botao direito no .eml -> Abrir com -> Outlook (Desktop). No celular, encaminhe/abra pelo app do Outlook.");
     setProgresso({ msg:"Empacotando ZIP...", atual:1, total:1 });
     var blobZip = await zip.generateAsync({ type:"blob" });
     var url = URL.createObjectURL(blobZip);
