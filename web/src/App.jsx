@@ -1230,7 +1230,13 @@ function Header(props) {
 
 function ModalSettings(props) {
   var [form, setForm] = useState({ key: props.settings.key || "", model: props.settings.model || "claude-sonnet-4-6", usarIA: props.settings.usarIA !== false, promotor: props.settings.promotor || "Rui César Farias dos Santos Júnior" });
+  var [mostrarKey, setMostrarKey] = useState(false);
   function f(k, v) { setForm(function(p){ return Object.assign({},p,{[k]:v}); }); }
+  function copiarKey() {
+    if (!form.key) { alert("Não há chave salva neste navegador."); return; }
+    try { navigator.clipboard.writeText(form.key).then(function(){ alert("Chave copiada para a área de transferência."); }, function(){ setMostrarKey(true); alert("Não consegui copiar automaticamente. A chave está visível — selecione e copie manualmente."); }); }
+    catch(e){ setMostrarKey(true); alert("Selecione a chave visível e copie manualmente."); }
+  }
   return React.createElement(Modal, null,
     React.createElement("h3", { style:{ margin:"0 0 6px", color:C.azul } }, "Configurações"),
     React.createElement("p", { style:{ margin:"0 0 16px", fontSize:12, color:"#777" } }, "A chave da API é usada apenas neste navegador e enviada direto para a Anthropic."),
@@ -1240,7 +1246,15 @@ function ModalSettings(props) {
         React.createElement("input", { type:"checkbox", id:"usarIA", checked:form.usarIA, onChange:function(e){f("usarIA",e.target.checked);} }),
         React.createElement("label", { htmlFor:"usarIA", style:{ fontSize:13, color:"#333", cursor:"pointer", fontWeight:"bold" } }, "Usar extração automática por IA (Claude)")
       ),
-      React.createElement("div", null, React.createElement("label", { style:C.label }, "Chave da API Anthropic (sk-ant-...)"), React.createElement("input", { style:C.input, type:"password", value:form.key, onChange:function(e){f("key",e.target.value);}, placeholder:"sk-ant-...", autoComplete:"off" })),
+      React.createElement("div", null,
+        React.createElement("label", { style:C.label }, "Chave da API Anthropic (sk-ant-...)"),
+        React.createElement("div", { style:{ display:"flex", gap:6 } },
+          React.createElement("input", { style:Object.assign({},C.input,{flex:1}), type: mostrarKey ? "text" : "password", value:form.key, onChange:function(e){f("key",e.target.value);}, placeholder:"sk-ant-...", autoComplete:"off" }),
+          React.createElement("button", { type:"button", style:btnOut({fontSize:12,padding:"6px 10px"}), onClick:function(){ setMostrarKey(function(v){ return !v; }); } }, mostrarKey ? "Ocultar" : "Mostrar"),
+          React.createElement("button", { type:"button", style:btn(C.azul,{fontSize:12,padding:"6px 10px"}), onClick:copiarKey }, "Copiar")
+        ),
+        React.createElement("div", { style:{ fontSize:11, color:"#888", marginTop:4 } }, "A chave fica só neste navegador. Use \"Mostrar\"/\"Copiar\" para reaproveitá-la em outro computador.")
+      ),
       React.createElement("div", null, React.createElement("label", { style:C.label }, "Modelo"), React.createElement("select", { style:C.input, value:form.model, onChange:function(e){f("model",e.target.value);} },
         React.createElement("option", { value:"claude-sonnet-4-6" }, "claude-sonnet-4-6 (recomendado)"),
         React.createElement("option", { value:"claude-opus-4-8" }, "claude-opus-4-8 (mais preciso)"),
