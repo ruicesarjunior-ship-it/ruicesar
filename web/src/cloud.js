@@ -1,50 +1,60 @@
-// Sincronização em nuvem (Firebase Firestore) — opcional.
+// Sincronização em nuvem (Firebase Realtime Database) — opcional e GRÁTIS (plano Spark).
 // Enquanto FIREBASE_CONFIG for null, a nuvem fica DESLIGADA e o app usa o banco
 // mestre publicado + localStorage normalmente. Ao preencher a configuração do
 // projeto Firebase, o banco de destinatários passa a sincronizar entre todos.
 //
-// Como ligar: substitua null pelo objeto de configuração do seu app web Firebase:
+// A config vem do Firebase (Configurações do projeto → app Web) e DEVE incluir
+// "databaseURL" (aparece depois de criar o Realtime Database). Ex.:
 // export var FIREBASE_CONFIG = {
-//   apiKey: "...", authDomain: "...", projectId: "...",
-//   storageBucket: "...", messagingSenderId: "...", appId: "..."
+//   apiKey: "...", authDomain: "...", databaseURL: "https://xxx.firebaseio.com",
+//   projectId: "...", storageBucket: "...", messagingSenderId: "...", appId: "..."
 // };
 export var FIREBASE_CONFIG = null;
 
-// Documento único que guarda o banco compartilhado: coleção "mpba", doc "banco".
 var _db = null, _fs = null, _ready = null;
+var CAMINHO = "mpba/banco"; // nó único com o banco compartilhado
 
-export function cloudAtivo() { return !!FIREBASE_CONFIG; }
+export function cloudAtivo() { return !!(FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL); }
 
 export async function cloudInit() {
-  if (!FIREBASE_CONFIG) return null;
+  if (!cloudAtivo()) return null;
   if (_ready) return _ready;
   _ready = (async function () {
     var appMod = await import("firebase/app");
     var authMod = await import("firebase/auth");
-    _fs = await import("firebase/firestore");
+    _fs = await import("firebase/database");
     var app = appMod.initializeApp(FIREBASE_CONFIG);
     try { await authMod.signInAnonymously(authMod.getAuth(app)); } catch (e) { console.warn("anon auth:", e); }
-    _db = _fs.getFirestore(app);
+    _db = _fs.getDatabase(app);
     return _db;
   })();
   return _ready;
 }
 
-function ref() { return _fs.doc(_db, "mpba", "banco"); }
+function lerVal(val) {
+  if (!val) return null;
+  var dest = [];
+  try { dest = val.json ? JSON.parse(val.json) : (Array.isArray(val.destinatarios) ? val.destinatarios : []); } catch (e) {}
+  return { destinatarios: dest, atualizado: val.atualizado };
+}
 
 export async function cloudLerBanco() {
   await cloudInit(); if (!_db) return null;
-  var snap = await _fs.getDoc(ref());
-  return snap.exists() ? snap.data() : null;
+  var snap = await _fs.get(_fs.ref(_db, CAMINHO));
+  return snap.exists() ? lerVal(snap.val()) : null;
 }
 
 export async function cloudEscreverBanco(destinatarios) {
   await cloudInit(); if (!_db) return;
-  await _fs.setDoc(ref(), { destinatarios: destinatarios, atualizado: new Date().toISOString() });
+  // Guarda como string JSON para evitar as conversoes de array do Realtime Database.
+  await _fs.set(_fs.ref(_db, CAMINHO), { json: JSON.stringify(destinatarios), atualizado: new Date().toISOString() });
 }
 
-// Observa mudanças remotas; chama cb(data) a cada alteração. Retorna função para cancelar.
+// Observa mudanças remotas; chama cb({destinatarios}) a cada alteração. Retorna função para cancelar.
 export async function cloudObservar(cb) {
   await cloudInit(); if (!_db) return function () {};
-  return _fs.onSnapshot(ref(), function (snap) { if (snap.exists()) cb(snap.data()); });
+  return _fs.onValue(_fs.ref(_db, CAMINHO), function (snap) {
+    var d = lerVal(snap.val());
+    if (d) cb(d);
+  });
 }
