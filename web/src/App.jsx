@@ -565,6 +565,7 @@ export default function App() {
   var [settings, setSettings] = useState({ key:"", model:"claude-sonnet-4-6", usarIA:true, promotor:"Rui César Farias dos Santos Júnior" });
   var [showSettings, setShowSettings] = useState(false);
   var fileRef = useRef();
+  var bancoFileRef = useRef();
   var abortRef = useRef(null);
 
   useEffect(function() {
@@ -573,7 +574,27 @@ export default function App() {
       var dSaved = await sGet("mpba:dest");
       var sSaved = await sGet("mpba:serv");
       var cSaved = await sGet("mpba:comarca");
-      var dList = (dSaved || DEST_INICIAIS).map(migrarDest);
+      var dList;
+      if (dSaved) {
+        dList = dSaved.map(migrarDest);
+      } else {
+        // Primeira vez neste navegador: ja carrega os padroes + a lista de Prado embutida,
+        // para o banco nao ficar vazio em outro computador (o casamento da IA depende disso).
+        dList = DEST_INICIAIS.map(migrarDest);
+        try {
+          var respCsv = await fetch(import.meta.env.BASE_URL + "destinatarios_prado.csv");
+          if (respCsv.ok) {
+            var rowsCsv = parseCSVDestinatarios(await respCsv.text());
+            var vistosSeed = {}; dList.forEach(function(d){ vistosSeed[normChave(d.nome)] = 1; });
+            rowsCsv.forEach(function(r){
+              var k = normChave(r.orgao); if (!k || vistosSeed[k]) return; vistosSeed[k] = 1;
+              var sp = splitEndereco(r.endereco);
+              dList.push({ id:uid(), comarca:comarcaPorNome(r.orgao), chave:normChave(r.orgao).slice(0,40), nome:r.orgao, vocativo:"", nomeAutoridade:r.nomeCargo||"", endereco:sp.endereco, cepCidade:sp.cepCidade, email:r.email||"", tipo:"institucional" });
+            });
+          }
+        } catch(e) { console.warn("seed banco:", e); }
+        try { await sSet("mpba:dest", dList); } catch(e) {}
+      }
       var sList = (sSaved || SERV_INICIAIS).map(function(s){ return Object.assign({ cargo:"" }, s); });
       var c = cSaved || "prado";
       setDestDB(dList);
@@ -616,6 +637,29 @@ export default function App() {
     } catch (e) {
       alert("Não foi possível importar a lista: " + (e && e.message ? e.message : e));
     }
+  }
+
+  // Exporta TODO o banco (JSON) para sincronizar entre computadores.
+  function exportarBanco() {
+    try {
+      var blob = new Blob([JSON.stringify(destDB, null, 2)], { type:"application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a"); a.href = url; a.download = "banco_destinatarios_mpba.json";
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+    } catch (e) { alert("Falha ao exportar: " + (e && e.message ? e.message : e)); }
+  }
+
+  async function importarBancoArquivo(file) {
+    try {
+      var txt = await file.text();
+      var arr = JSON.parse(txt);
+      if (!Array.isArray(arr) || arr.length === 0) { alert("Arquivo inválido: esperado um banco exportado (.json)."); return; }
+      if (!confirm("Isso vai SUBSTITUIR todo o banco de destinatários atual por " + arr.length + " item(ns) do arquivo. Continuar?")) return;
+      var lista = arr.map(migrarDest).map(function(d){ return Object.assign({}, d, { id: d.id || uid(), tipo: d.tipo || "institucional" }); });
+      await salvarDest(lista);
+      alert("Banco importado com sucesso: " + lista.length + " destinatários.");
+    } catch (e) { alert("Não foi possível importar: " + (e && e.message ? e.message : e)); }
   }
 
   function mudarComarca(c) {
@@ -908,6 +952,10 @@ export default function App() {
           React.createElement("div", { style:{ display:"flex", gap:6, flexWrap:"wrap" } },
             React.createElement("button", { style:btn("#4a90d9",{fontSize:12,padding:"7px 10px"}), onClick:importarListaPrado }, "Importar lista Prado"),
             React.createElement("button", { style:btn("#555",{fontSize:12,padding:"7px 10px"}), onClick:function(){ setModalImport(true); } }, "Importar CSV"),
+            React.createElement("button", { style:btn("#1a7a3a",{fontSize:12,padding:"7px 10px"}), onClick:exportarBanco }, "Exportar banco"),
+            React.createElement("label", { style:Object.assign({},btn("#0a7",{fontSize:12,padding:"7px 10px",cursor:"pointer"})) }, "Importar banco",
+              React.createElement("input", { ref:bancoFileRef, type:"file", accept:".json,application/json", style:{ display:"none" }, onChange:function(e){ if(e.target.files[0]){ importarBancoArquivo(e.target.files[0]); e.target.value=""; } } })
+            ),
             React.createElement("button", { style:btn(C.verde,{fontSize:12,padding:"7px 10px"}), onClick:function() { setModalDest({ dest:{ id:uid(), comarca:comarca, chave:"", nome:"", vocativo:"", nomeAutoridade:"", endereco:"", cepCidade:"", email:"", tipo:"institucional" }, isNew:true }); } }, "+ Novo")
           )
         ),
