@@ -385,8 +385,10 @@ var PROMPT_EXTRACAO =
 "Você é assistente de uma Promotoria de Justiça do Ministério Público da Bahia. " +
 "Recebe um ou mais arquivos que podem ser DESPACHOS isolados e/ou PROCEDIMENTOS ADMINISTRATIVOS INTEIROS (com vários despachos ao longo das páginas).\n\n" +
 "Tarefa: AGRUPE o conteúdo por NÚMERO DE PROCEDIMENTO (ex.: 201.9.551584/2025, 003.9.000123/2025). Para CADA procedimento:\n" +
-"1) Localize o ÚLTIMO despacho (o mais recente do Promotor). Se ele apenas remeter a despacho anterior (ex.: \"reitere-se\", \"cumpra-se o despacho anterior\", \"conforme despacho de fls. X\", \"renove-se\"), SIGA a cadeia de remissões e considere os comandos efetivamente determinados a cumprir.\n" +
-"2) Identifique CADA DILIGÊNCIA determinada. Uma diligência = UM destinatário + o que se determinou SOLICITAR/REQUISITAR ÀQUELE destinatário especificamente.\n\n" +
+"1) Localize o ÚLTIMO despacho (o mais recente do Promotor) e trate SOMENTE dele.\n" +
+"   REITERAÇÃO / DESPACHO ANTERIOR (muito importante): se o último despacho apenas manda REITERAR ou CUMPRIR/RENOVAR despacho anterior (ex.: \"reitere-se\", \"reitere-se os ofícios\", \"cumpra-se o despacho anterior\", \"cumpra-se o despacho de fls. X / ID MP Y\", \"renove-se\", \"diante da ausência de resposta, reiterem-se\"), então LOCALIZE nos autos esse despacho anterior referenciado e extraia OS MESMOS destinatários e comandos que ELE determinou (é para as MESMAS pessoas/órgãos, reenviando). NÃO devolva vazio nem \"a identificar\" nesses casos: vá buscar o despacho anterior. Marque tipoCertidao = \"reiteracao\".\n" +
+"2) Identifique CADA DILIGÊNCIA EXPRESSAMENTE determinada. Uma diligência = UM destinatário + o que se determinou SOLICITAR/REQUISITAR/OFICIAR/NOTIFICAR/INTIMAR ÀQUELE destinatário.\n" +
+"   Crie diligência SOMENTE para quem o despacho EXPRESSAMENTE mandou oficiar/notificar/requisitar. NÃO crie diligência para partes apenas citadas/qualificadas sem determinação de ofício. Se o último despacho NÃO determinar expedição de ofício (ex.: apenas arquivamento, ciência, juntada, conclusão), devolva \"diligencias\": [] para esse procedimento.\n\n" +
 "REGRA CRÍTICA DE ATRIBUIÇÃO (leia com atenção):\n" +
 "- O teor de cada diligência deve corresponder EXATAMENTE ao que o despacho mandou pedir ÀQUELE destinatário. NUNCA repita o mesmo teor para destinatários diferentes e NUNCA misture o comando de um destinatário no de outro.\n" +
 "- Use a natureza do pedido para conferir o destinatário correto. Exemplos de pistas: boletim de ocorrência (BO), inquérito policial, situação processual de investigado, registro de ocorrência => DELEGACIA DE POLÍCIA. Relatório psicossocial/acompanhamento de família, medidas de proteção a criança/adolescente => CONSELHO TUTELAR. Acompanhamento socioassistencial, CRAS/CREAS, visita domiciliar social, idoso/vulnerável => CREAS ou CRAS. Atendimento/prontuário médico => SECRETARIA DE SAÚDE/HOSPITAL.\n" +
@@ -394,6 +396,7 @@ var PROMPT_EXTRACAO =
 "IDENTIFICAÇÃO DO NOME REAL (muito importante): para CADA diligência, descubra QUEM é o destinatário pelo NOME, procurando em TODO o material fornecido — não só no despacho, mas também na CAPA/AUTUAÇÃO, na QUALIFICAÇÃO das partes, na petição/representação inicial, no boletim de ocorrência e em peças anteriores.\n" +
 "- Quando o despacho usar um papel genérico (ex.: \"oficie-se/notifique-se o(a) NOTICIANTE / DENUNCIANTE / VÍTIMA / REPRESENTANTE / COMUNICANTE / REQUERENTE / INVESTIGADO / AVERIGUADO / NOTICIADO\"), LOCALIZE o nome próprio dessa pessoa na qualificação dos autos e use-o em orgao e em nomeAutoridade, com endereco, cepCidade, email e (se útil) o vínculo entre parênteses, ex.: \"João da Silva (noticiante)\".\n" +
 "- Quando mandar oficiar um ÓRGÃO, use o nome completo do órgão.\n" +
+"- CASAMENTO COM O BANCO (essencial para não pedir identificação manual à toa): ao final há a lista \"DESTINATÁRIOS JÁ CADASTRADOS\". Se a diligência corresponder a um deles — AINDA QUE o despacho use outro nome, sigla ou abreviação (ex.: \"DT de Prado\" = \"Delegacia Territorial de Prado\"; \"Secretaria de Saúde\" = a que estiver na lista; \"CT\" = \"Conselho Tutelar\") — copie em \"bancoNome\" EXATAMENTE o nome tal como está na lista. Deixe \"bancoNome\" vazio SOMENTE quando não houver correspondente (pessoa física ou órgão realmente novo).\n" +
 "- Use \"Destinatário a identificar\" APENAS como ÚLTIMO recurso, quando, mesmo após procurar em todo o material, realmente não houver como saber o nome. Nesse caso, no teor, ESCREVA o papel e onde procurar (ex.: \"notificar o denunciante — qualificação não localizada nos autos enviados\"), para o servidor saber quem buscar.\n" +
 "- NÃO invente nome, endereço, CPF, e-mail ou telefone: só informe o que constar nos autos.\n\n" +
 "Para cada diligência forneça:\n" +
@@ -404,11 +407,24 @@ var PROMPT_EXTRACAO =
 "tipo do procedimento: PA, IP, NF, IC, PP ou TCO.\n" +
 "tipoCertidao do procedimento (qual certidão de cumprimento será lavrada): \"encaminhamento\" (expedição/encaminhamento normal dos ofícios) | \"reiteracao\" (o despacho determina REITERAR ofícios — \"reitere-se\", \"renove-se\", ou reiteração por ausência de resposta) | \"prazo_vencido\" (o procedimento está com prazo de conclusão vencido / determina-se providência por prazo vencido). Em dúvida, use \"encaminhamento\".\n\n" +
 "Responda SOMENTE com um array JSON, sem markdown e sem explicações, no formato:\n" +
-"[{\"numProc\":\"...\",\"tipo\":\"NF\",\"tipoCertidao\":\"encaminhamento\",\"diligencias\":[{\"orgao\":\"...\",\"vocativo\":\"...\",\"nomeAutoridade\":\"\",\"endereco\":\"\",\"cepCidade\":\"\",\"email\":\"\",\"assunto\":\"...\",\"teor\":\"...\",\"prazo\":\"15 (quinze) dias\"}]}]\n" +
-"Se um procedimento não tiver diligência clara, use \"diligencias\":[{\"orgao\":\"Destinatário a identificar\",\"assunto\":\"\",\"teor\":\"\",\"prazo\":\"15 (quinze) dias\"}].";
+"[{\"numProc\":\"...\",\"tipo\":\"NF\",\"tipoCertidao\":\"encaminhamento\",\"diligencias\":[{\"bancoNome\":\"\",\"orgao\":\"...\",\"vocativo\":\"...\",\"nomeAutoridade\":\"\",\"endereco\":\"\",\"cepCidade\":\"\",\"email\":\"\",\"assunto\":\"...\",\"teor\":\"...\",\"prazo\":\"15 (quinze) dias\"}]}]\n" +
+"Se o procedimento não tiver diligência a expedir, use \"diligencias\": []. NÃO invente destinatário.";
+
+// Monta o bloco com a lista de destinatarios do banco (para a IA casar).
+function montarBancoBlock(listaBanco) {
+  if (!listaBanco || !listaBanco.length) return "";
+  var linhas = listaBanco.map(function(d){ return "- " + d.nome; }).join("\n");
+  return "\n\n===== DESTINATÁRIOS JÁ CADASTRADOS (use em \"bancoNome\" o nome EXATO desta lista quando corresponder) =====\n" + linhas;
+}
+
+// Tokens significativos (palavras > 3 letras, sem termos genericos) para casamento fuzzy.
+var STOP_TOKENS = { "de":1,"da":1,"do":1,"dos":1,"das":1,"municipal":1,"estado":1,"bahia":1,"prado":1,"nova":1,"vicosa":1,"alcobaca":1,"comarca":1,"justica":1 };
+function tokensSig(s) {
+  return normChave(s).split(" ").filter(function(w){ return w.length > 3 && !STOP_TOKENS[w]; });
+}
 
 // Envia todos os arquivos numa unica chamada e retorna o array de procedimentos.
-async function extrairProcedimentos(files, onProgresso, signal) {
+async function extrairProcedimentos(files, onProgresso, signal, listaBanco) {
   var content = [];
   for (var i = 0; i < files.length; i++) {
     var f = files[i];
@@ -429,7 +445,7 @@ async function extrairProcedimentos(files, onProgresso, signal) {
       content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + recortarTexto(t, 130000) });
     }
   }
-  content.push({ type:"text", text: PROMPT_EXTRACAO });
+  content.push({ type:"text", text: PROMPT_EXTRACAO + montarBancoBlock(listaBanco) });
   if (onProgresso) onProgresso("IA analisando os documentos... (pode levar 1 a 2 minutos)");
   var raw = await anthropicMessages({ max_tokens: 8000, content: content, signal: signal, timeoutMs: 240000 });
   var arr = extrairJSON(raw);
@@ -604,29 +620,51 @@ export default function App() {
     setServAtual(servDB.find(function(s) { return s.comarca === c; }) || servDB[0] || null);
   }
 
-  // Resolve um destinatario (objeto da IA {orgao,...} ou string) contra o banco da comarca.
+  // Resolve um destinatario (objeto da IA {orgao, bancoNome,...} ou string) contra o banco.
   function resolverDest(item) {
-    var texto = typeof item === "string" ? item : (item.orgao || item.nome || "");
-    var lower = normChave(texto);
-    var lista = destDB.filter(function(d) { return d.comarca === comarca || d.comarca === "todos"; });
-    var achado = null;
-    for (var i = 0; i < lista.length; i++) {
-      var d = lista[i];
-      if (lower && (lower.indexOf(normChave(d.chave)) !== -1 || normChave(d.nome).indexOf(lower) !== -1 || lower.indexOf(normChave(d.nome)) !== -1)) { achado = d; break; }
-    }
     var ia = typeof item === "object" ? item : {};
-    if (achado) {
-      // mescla: prefere dado do banco; complementa com o que a IA achou
+    var lista = destDB.filter(function(d) { return d.comarca === comarca || d.comarca === "todos"; });
+    function merge(achado) {
       return {
-        id: achado.id,
-        chave: achado.chave,
-        nome: achado.nome,
+        id: achado.id, chave: achado.chave, nome: achado.nome,
         vocativo: achado.vocativo || ia.vocativo || "",
         nomeAutoridade: achado.nomeAutoridade || ia.nomeAutoridade || "",
         endereco: achado.endereco || ia.endereco || "",
         cepCidade: achado.cepCidade || ia.cepCidade || "",
         email: achado.email || ia.email || "",
       };
+    }
+    // 1) Casamento explicito indicado pela IA (bancoNome)
+    if (ia.bancoNome && !/identificar/i.test(ia.bancoNome)) {
+      var bn = normChave(ia.bancoNome);
+      var mb = lista.find(function(d){ return normChave(d.nome) === bn; })
+            || lista.find(function(d){ return normChave(d.nome).indexOf(bn) !== -1 || bn.indexOf(normChave(d.nome)) !== -1; });
+      if (mb) return merge(mb);
+    }
+    var texto = typeof item === "string" ? item : (ia.orgao || ia.nome || "");
+    var lower = normChave(texto);
+    if (!lower || /identificar/i.test(lower)) return null;
+    // 2) Exato por nome ou chave
+    var ex = lista.find(function(d){ return normChave(d.nome) === lower || normChave(d.chave) === lower; });
+    if (ex) return merge(ex);
+    // 3) Substring (chave/nome contidos no texto, ou vice-versa)
+    var sub = lista.find(function(d){ return lower.indexOf(normChave(d.chave)) !== -1 || normChave(d.nome).indexOf(lower) !== -1 || lower.indexOf(normChave(d.nome)) !== -1; });
+    if (sub) return merge(sub);
+    // 4) Sobreposicao de tokens significativos (ex.: "DT de Prado" ~ "Delegacia Territorial de Prado")
+    var toks = tokensSig(lower);
+    if (toks.length) {
+      var best = null, bestScore = 0;
+      lista.forEach(function(d){
+        var chaveToks = tokensSig(d.chave);
+        var nomeToks = tokensSig(d.nome);
+        var alvo = chaveToks.length ? chaveToks : nomeToks;
+        if (!alvo.length) return;
+        var shared = alvo.filter(function(t){ return toks.indexOf(t) !== -1; }).length;
+        var todosChave = chaveToks.length > 0 && chaveToks.every(function(t){ return toks.indexOf(t) !== -1; });
+        var score = (todosChave ? 100 : 0) + shared;
+        if (score > bestScore && (todosChave || shared >= 2)) { bestScore = score; best = d; }
+      });
+      if (best) return merge(best);
     }
     return null;
   }
@@ -705,7 +743,8 @@ export default function App() {
       if (arquivosIA.length > 0) {
         if (settings.usarIA && settings.key) {
           setProgresso({ msg:"Preparando documentos...", atual:0, total:0 });
-          var extraidos = await extrairProcedimentos(arquivosIA, function(msg){ setProgresso({ msg:msg, atual:0, total:0 }); }, ctrl.signal);
+          var listaBanco = destDB.filter(function(d){ return d.comarca === comarca || d.comarca === "todos"; });
+          var extraidos = await extrairProcedimentos(arquivosIA, function(msg){ setProgresso({ msg:msg, atual:0, total:0 }); }, ctrl.signal, listaBanco);
           brutos = brutos.concat(extraidos);
         } else {
           // sem IA: cria procedimentos vazios a partir do nome do arquivo (para preenchimento manual)
