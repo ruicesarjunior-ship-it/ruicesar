@@ -84,6 +84,20 @@ function migrarDest(d) {
   });
 }
 
+// Mescla o banco mestre (publicado) no banco local: entradas do mestre prevalecem
+// para os mesmos nomes (atualiza e-mail/endereco), mantendo as entradas locais proprias.
+function mesclarMaster(local, masterList) {
+  var byNome = {};
+  (local || []).forEach(function(d){ d = migrarDest(d); byNome[normChave(d.nome)] = d; });
+  (masterList || []).forEach(function(m){
+    m = migrarDest(m);
+    var k = normChave(m.nome);
+    var existente = byNome[k];
+    byNome[k] = Object.assign({}, m, { id: (existente && existente.id) ? existente.id : (m.id || uid()) });
+  });
+  return Object.keys(byNome).map(function(k){ return byNome[k]; });
+}
+
 function encXml(s) {
   return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
@@ -574,25 +588,34 @@ export default function App() {
       var dSaved = await sGet("mpba:dest");
       var sSaved = await sGet("mpba:serv");
       var cSaved = await sGet("mpba:comarca");
+      var verSaved = await sGet("mpba:bancoVersao");
       var dList;
-      if (dSaved) {
+      // Banco mestre publicado (sincronizacao de leitura entre computadores).
+      var master = null;
+      try {
+        var respM = await fetch(import.meta.env.BASE_URL + "banco.json", { cache:"no-store" });
+        if (respM.ok) master = await respM.json();
+      } catch(e) { console.warn("banco mestre:", e); }
+
+      if (master && Array.isArray(master.destinatarios)) {
+        var baseLocal;
+        if (dSaved) {
+          // Ja havia banco local: so aplica o mestre se a versao mudou (mantendo os itens locais proprios).
+          if (verSaved === master.versao) { setDestDB(dSaved.map(migrarDest)); baseLocal = null; }
+          else baseLocal = dSaved.map(migrarDest);
+        } else {
+          baseLocal = DEST_INICIAIS.map(migrarDest);
+        }
+        if (baseLocal) {
+          dList = mesclarMaster(baseLocal, master.destinatarios);
+          try { await sSet("mpba:dest", dList); await sSet("mpba:bancoVersao", master.versao); } catch(e) {}
+        } else {
+          dList = dSaved.map(migrarDest);
+        }
+      } else if (dSaved) {
         dList = dSaved.map(migrarDest);
       } else {
-        // Primeira vez neste navegador: ja carrega os padroes + a lista de Prado embutida,
-        // para o banco nao ficar vazio em outro computador (o casamento da IA depende disso).
         dList = DEST_INICIAIS.map(migrarDest);
-        try {
-          var respCsv = await fetch(import.meta.env.BASE_URL + "destinatarios_prado.csv");
-          if (respCsv.ok) {
-            var rowsCsv = parseCSVDestinatarios(await respCsv.text());
-            var vistosSeed = {}; dList.forEach(function(d){ vistosSeed[normChave(d.nome)] = 1; });
-            rowsCsv.forEach(function(r){
-              var k = normChave(r.orgao); if (!k || vistosSeed[k]) return; vistosSeed[k] = 1;
-              var sp = splitEndereco(r.endereco);
-              dList.push({ id:uid(), comarca:comarcaPorNome(r.orgao), chave:normChave(r.orgao).slice(0,40), nome:r.orgao, vocativo:"", nomeAutoridade:r.nomeCargo||"", endereco:sp.endereco, cepCidade:sp.cepCidade, email:r.email||"", tipo:"institucional" });
-            });
-          }
-        } catch(e) { console.warn("seed banco:", e); }
         try { await sSet("mpba:dest", dList); } catch(e) {}
       }
       var sList = (sSaved || SERV_INICIAIS).map(function(s){ return Object.assign({ cargo:"" }, s); });
