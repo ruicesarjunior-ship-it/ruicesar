@@ -9,7 +9,15 @@
 //   apiKey: "...", authDomain: "...", databaseURL: "https://xxx.firebaseio.com",
 //   projectId: "...", storageBucket: "...", messagingSenderId: "...", appId: "..."
 // };
-export var FIREBASE_CONFIG = null;
+export var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBFZFZMSPYnVpZgAr6x-H4_eilbxdkvxdI",
+  authDomain: "expedicao-promotorias.firebaseapp.com",
+  databaseURL: "https://expedicao-promotorias-default-rtdb.firebaseio.com",
+  projectId: "expedicao-promotorias",
+  storageBucket: "expedicao-promotorias.firebasestorage.app",
+  messagingSenderId: "1015561497648",
+  appId: "1:1015561497648:web:584ae6721ea4e77122d1f5"
+};
 
 var _db = null, _fs = null, _ready = null;
 var CAMINHO = "mpba/banco"; // nó único com o banco compartilhado
