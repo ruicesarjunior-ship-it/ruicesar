@@ -728,6 +728,8 @@ export default function App() {
   // Consolida as diligencias por destinatario (juntada) e gera oficios + certidoes.
   // Cada diligencia ja carrega o SEU teor especifico daquele destinatario.
   function finalizar(diligencias) {
+    // Rede de seguranca: nunca gerar oficio para "Destinatario a identificar" (ou sem nome).
+    diligencias = (diligencias || []).filter(function(d){ return d && d.dest && d.dest.nome && d.dest.nome.trim() && !/identificar/i.test(d.dest.nome); });
     var numInicial = parseInt(cfg.numInicial, 10);
     var ano = cfg.ano || String(new Date().getFullYear());
     function destKey(d) { return d.id || normChave(d.nome); }
@@ -1025,16 +1027,21 @@ export default function App() {
         destDB:destDB,
         comarca:comarca,
         onConfirmar:function(extras) {
-          // salva no banco os marcados (exceto os que foram redirecionados via outro orgao)
-          var novosParaSalvar = extras.filter(function(r){ return r.salvar && r.nome && !r.via; });
+          function nomeValido(n){ return n && n.trim() && !/identificar/i.test(n); }
+          // salva no banco os marcados (com nome valido e nao redirecionados)
+          var novosParaSalvar = extras.filter(function(r){ return r.salvar && nomeValido(r.nome) && !r.via; });
           if (novosParaSalvar.length > 0) {
             var vistos = {};
             var unicos = novosParaSalvar.filter(function(r){ var k=normChave(r.nome); if(vistos[k]) return false; vistos[k]=1; return true; });
             var novaLista = destDB.concat(unicos.map(function(r){ return { id:uid(), comarca:comarca, chave:r.chave||normChave(r.nome).slice(0,24), nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", tipo:"institucional" }; }));
             salvarDest(novaLista);
           }
-          // cada pendente vira uma diligencia resolvida
-          var novasDilig = extras.filter(function(r){ return r.nome || r.via; }).map(function(r){
+          // cada pendente vira uma diligencia: PRIORIDADE ao nome preenchido; senao, encaminha via orgao.
+          // Nunca gera "Destinatario a identificar".
+          var novasDilig = extras.map(function(r){
+            if (nomeValido(r.nome)) {
+              return { numProc:r.numProc, tipo:r.tipo, tipoCertidao:r.tipoCertidao||"encaminhamento", assunto:r.assunto||"", teor:r.teor||"", prazo:r.prazo||"15 (quinze) dias", dest:{ nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) } };
+            }
             if (r.via) {
               // Encaminhar via orgao abrangente (ex.: Prefeitura) -> em nome da autoridade, que direciona ao setor competente
               var org = destDB.find(function(d){ return d.chave===r.via && (d.comarca===comarca||d.comarca==="todos"); }) || destDB.find(function(d){ return d.chave===r.via; });
@@ -1043,7 +1050,7 @@ export default function App() {
                   dest:{ id:org.id, nome:org.nome, vocativo:org.vocativo||"A Sua Excelência o Senhor", nomeAutoridade:org.nomeAutoridade||"", endereco:org.endereco||"", cepCidade:org.cepCidade||"", email:org.email||"", chave:org.chave } };
               }
             }
-            return { numProc:r.numProc, tipo:r.tipo, tipoCertidao:r.tipoCertidao||"encaminhamento", assunto:r.assunto||"", teor:r.teor||"", prazo:r.prazo||"15 (quinze) dias", dest:{ nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) } };
+            return null; // sem nome e sem encaminhamento -> ignorado (nunca vira placeholder)
           }).filter(Boolean);
           var todas = procs.concat(novasDilig);
           setProcs(todas);
@@ -1298,9 +1305,17 @@ function TelaResolucao(props) {
   // Orgaos "abrangentes" disponiveis no banco (Prefeitura primeiro, depois os demais da comarca).
   var coberturas = destDB.filter(function(d){ return d.comarca === comarca || d.comarca === "todos"; })
     .sort(function(a,b){ var pa = normChave(a.nome).indexOf("prefeitura")!==-1?0:1; var pb = normChave(b.nome).indexOf("prefeitura")!==-1?0:1; return pa-pb; });
+  var prefeituraCob = coberturas.filter(function(c){ return normChave(c.nome).indexOf("prefeitura")!==-1; })[0];
+  function ehPlaceholder(s){ return !s || /identificar/i.test(s); }
   var [itens, setItens] = useState(pendentes.map(function(p){
     var ia = p.ia || {};
-    return Object.assign({}, p, { salvar:true, via:"", form:{ nome: ia.orgao || p.textoOriginal || "", vocativo: ia.vocativo || "", nomeAutoridade: ia.nomeAutoridade || "", endereco: ia.endereco || "", cepCidade: ia.cepCidade || "", email: ia.email || "", chave: normChave(ia.orgao || p.textoOriginal || "").slice(0,24) } });
+    var bruto = ia.orgao || p.textoOriginal || "";
+    var naoIdent = ehPlaceholder(bruto);
+    var nome0 = naoIdent ? "" : bruto;
+    // Se a IA nao identificou, ja deixa pre-selecionado o encaminhamento via Prefeitura (se houver no banco),
+    // para nunca sair "Destinatario a identificar". O servidor ainda pode preencher os dados diretos acima.
+    var via0 = naoIdent && prefeituraCob ? prefeituraCob.chave : "";
+    return Object.assign({}, p, { naoIdent:naoIdent, salvar:true, via:via0, form:{ nome: nome0, vocativo: ia.vocativo || "", nomeAutoridade: ia.nomeAutoridade || "", endereco: ia.endereco || "", cepCidade: ia.cepCidade || "", email: ia.email || "", chave: normChave(nome0).slice(0,24) } });
   }));
   function atualizar(id, upd) { setItens(function(prev){ return prev.map(function(x){ return x.id===id?Object.assign({},x,upd):x; }); }); }
   return React.createElement("div", null,
@@ -1311,7 +1326,8 @@ function TelaResolucao(props) {
     itens.map(function(item, idx) {
       return React.createElement("div", { key:item.id, style:Object.assign({},C.card) },
         React.createElement("div", { style:{ display:"inline-block", background:"#e8f0fe", color:C.azul, padding:"2px 8px", borderRadius:6, fontSize:11, fontWeight:"bold", marginBottom:6 } }, "Procedimento: " + (item.numProc||"?")),
-        React.createElement("div", { style:{ fontWeight:"bold", color:"#0a2440", fontSize:14, marginBottom:4 } }, "Quem: \"" + item.textoOriginal + "\""),
+        React.createElement("div", { style:{ fontWeight:"bold", color:"#0a2440", fontSize:14, marginBottom:4 } }, item.naoIdent ? "Destinatário não identificado pela IA" : ("Quem: \"" + item.textoOriginal + "\"")),
+        item.naoIdent && React.createElement("div", { style:{ fontSize:11, color:"#7a5c00", background:"#fffbeb", border:"1px solid #f5e090", borderRadius:6, padding:"6px 8px", marginBottom:8 } }, prefeituraCob ? ("Preencha os dados abaixo se conseguir identificar. Caso contrário, este item já será encaminhado via " + prefeituraCob.nome + " (em nome do Prefeito), sem gerar \"Destinatário a identificar\".") : "Preencha os dados abaixo ou escolha um órgão para encaminhar — este item não será gerado como \"Destinatário a identificar\"."),
         item.teor && React.createElement("div", { style:{ fontSize:11, color:"#888", marginBottom:10 } }, "Diligência: " + item.teor.slice(0,160) + (item.teor.length>160?"...":"")),
         React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 } },
           [["Órgão / Nome *","nome","Delegacia de Polícia de ..."],["Vocativo","vocativo","A Sua Excelência o Senhor"],["Nome da autoridade","nomeAutoridade",""],["Email","email","email@dominio.com"],["Endereço","endereco","Av. ..., nº, bairro"],["CEP / Cidade","cepCidade","00000-000 Cidade - BA"],["Palavra-chave","chave","como aparece no despacho"]].map(function(field) {
@@ -1337,8 +1353,12 @@ function TelaResolucao(props) {
       );
     }),
     React.createElement("div", { style:{ display:"flex", gap:10, marginTop:8 } },
-      React.createElement("button", { style:btnOut(), onClick:onPular }, "Pular e gerar assim mesmo"),
-      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){ onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,via:x.via||"",originalNome:x.form.nome||x.textoOriginal||"",numProc:x.numProc,tipo:x.tipo,tipoCertidao:x.tipoCertidao,assunto:x.assunto,teor:x.teor,prazo:x.prazo}); })); } }, "Confirmar e gerar ofícios")
+      React.createElement("button", { style:btnOut(), onClick:onPular }, "Pular (ignorar não identificados)"),
+      React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){
+        var pendentesSem = itens.filter(function(x){ var nomeOk = x.form.nome && x.form.nome.trim() && !/identificar/i.test(x.form.nome); return !nomeOk && !x.via; });
+        if (pendentesSem.length > 0) { alert(pendentesSem.length + " destinatário(s) ainda sem identificação. Para cada um: preencha o Órgão/Nome OU escolha \"Encaminhar via\" um órgão. (Se quiser ignorá-los, use o botão \"Pular\".)"); return; }
+        onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,via:x.via||"",originalNome:x.form.nome||x.textoOriginal||"",numProc:x.numProc,tipo:x.tipo,tipoCertidao:x.tipoCertidao,assunto:x.assunto,teor:x.teor,prazo:x.prazo}); }));
+      } }, "Confirmar e gerar ofícios")
     )
   );
 }
