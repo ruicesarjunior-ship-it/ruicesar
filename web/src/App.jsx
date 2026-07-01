@@ -396,7 +396,10 @@ var PROMPT_EXTRACAO =
 "IDENTIFICAÇÃO DO NOME REAL (muito importante): para CADA diligência, descubra QUEM é o destinatário pelo NOME, procurando em TODO o material fornecido — não só no despacho, mas também na CAPA/AUTUAÇÃO, na QUALIFICAÇÃO das partes, na petição/representação inicial, no boletim de ocorrência e em peças anteriores.\n" +
 "- Quando o despacho usar um papel genérico (ex.: \"oficie-se/notifique-se o(a) NOTICIANTE / DENUNCIANTE / VÍTIMA / REPRESENTANTE / COMUNICANTE / REQUERENTE / INVESTIGADO / AVERIGUADO / NOTICIADO\"), LOCALIZE o nome próprio dessa pessoa na qualificação dos autos e use-o em orgao e em nomeAutoridade, com endereco, cepCidade, email e (se útil) o vínculo entre parênteses, ex.: \"João da Silva (noticiante)\".\n" +
 "- Quando mandar oficiar um ÓRGÃO, use o nome completo do órgão.\n" +
-"- CASAMENTO COM O BANCO (essencial para não pedir identificação manual à toa): ao final há a lista \"DESTINATÁRIOS JÁ CADASTRADOS\". Se a diligência corresponder a um deles — AINDA QUE o despacho use outro nome, sigla ou abreviação (ex.: \"DT de Prado\" = \"Delegacia Territorial de Prado\"; \"Secretaria de Saúde\" = a que estiver na lista; \"CT\" = \"Conselho Tutelar\") — copie em \"bancoNome\" EXATAMENTE o nome tal como está na lista. Deixe \"bancoNome\" vazio SOMENTE quando não houver correspondente (pessoa física ou órgão realmente novo).\n" +
+"- CASAMENTO COM O BANCO (essencial para não pedir identificação manual à toa): ao final há a lista \"DESTINATÁRIOS JÁ CADASTRADOS\", TODOS da localidade do procedimento (o município está indicado no cabeçalho da lista). Se a diligência corresponder a um deles — AINDA QUE o despacho use outro nome, sigla ou abreviação (ex.: \"DT de Prado\" = \"Delegacia Territorial de Prado\"; \"CT\" = \"Conselho Tutelar\") — copie em \"bancoNome\" EXATAMENTE o nome tal como está na lista.\n" +
+"- ÓRGÃO GENÉRICO POR CONTEXTO: com frequência o despacho cita o órgão SEM o município (ex.: só \"Delegacia de Polícia\", \"Conselho Tutelar\", \"CREAS\", \"Secretaria de Saúde\", \"Prefeitura\"). Como os fatos/jurisdição do procedimento são da localidade da lista, associe o órgão genérico ao correspondente DAQUELA localidade (ex.: num feito de Prado, \"Delegacia de Polícia\" = \"Delegacia de Polícia Civil de Prado\"; \"Conselho Tutelar\" = \"Conselho Tutelar de Prado\").\n" +
+"- PROIBIÇÃO ABSOLUTA DE ERRO/ALUCINAÇÃO: só preencha bancoNome quando tiver CERTEZA de que é o MESMO órgão (mesma natureza e localidade coerente). NUNCA associe a órgão de natureza diferente (ex.: Delegacia/Polícia Civil ≠ Polícia Militar; CREAS ≠ CRAS; Secretaria de Saúde ≠ Secretaria de Educação; Conselho Tutelar ≠ Conselho de Direitos). Se houver QUALQUER dúvida, ambiguidade (mais de um possível) ou indício de município diferente do da lista, deixe bancoNome VAZIO — é MELHOR ir para conferência manual do que errar o destinatário. Nunca invente. Nunca chute.\n" +
+"- Deixe \"bancoNome\" vazio quando não houver correspondente seguro (pessoa física, órgão novo, ou dúvida).\n" +
 "- Use \"Destinatário a identificar\" APENAS como ÚLTIMO recurso, quando, mesmo após procurar em todo o material, realmente não houver como saber o nome. Nesse caso, no teor, ESCREVA o papel e onde procurar (ex.: \"notificar o denunciante — qualificação não localizada nos autos enviados\"), para o servidor saber quem buscar.\n" +
 "- NÃO invente nome, endereço, CPF, e-mail ou telefone: só informe o que constar nos autos.\n\n" +
 "Para cada diligência forneça:\n" +
@@ -411,10 +414,11 @@ var PROMPT_EXTRACAO =
 "Se o procedimento não tiver diligência a expedir, use \"diligencias\": []. NÃO invente destinatário.";
 
 // Monta o bloco com a lista de destinatarios do banco (para a IA casar).
-function montarBancoBlock(listaBanco) {
+function montarBancoBlock(listaBanco, municipio) {
   if (!listaBanco || !listaBanco.length) return "";
   var linhas = listaBanco.map(function(d){ return "- " + d.nome; }).join("\n");
-  return "\n\n===== DESTINATÁRIOS JÁ CADASTRADOS (use em \"bancoNome\" o nome EXATO desta lista quando corresponder) =====\n" + linhas;
+  var cab = municipio ? ("Localidade/município de referência destes destinatários: " + municipio + "/BA. ") : "";
+  return "\n\n===== DESTINATÁRIOS JÁ CADASTRADOS =====\n" + cab + "Use em \"bancoNome\" o nome EXATO desta lista quando a diligência corresponder a um deles (inclusive quando o despacho citar o órgão de forma genérica, sem o município). Na dúvida, deixe \"bancoNome\" vazio.\n" + linhas;
 }
 
 // Tokens significativos (palavras > 3 letras, sem termos genericos) para casamento fuzzy.
@@ -424,7 +428,7 @@ function tokensSig(s) {
 }
 
 // Envia todos os arquivos numa unica chamada e retorna o array de procedimentos.
-async function extrairProcedimentos(files, onProgresso, signal, listaBanco) {
+async function extrairProcedimentos(files, onProgresso, signal, listaBanco, municipio) {
   var content = [];
   for (var i = 0; i < files.length; i++) {
     var f = files[i];
@@ -445,7 +449,7 @@ async function extrairProcedimentos(files, onProgresso, signal, listaBanco) {
       content.push({ type:"text", text:"===== ARQUIVO: " + f.name + " =====\n" + recortarTexto(t, 130000) });
     }
   }
-  content.push({ type:"text", text: PROMPT_EXTRACAO + montarBancoBlock(listaBanco) });
+  content.push({ type:"text", text: PROMPT_EXTRACAO + montarBancoBlock(listaBanco, municipio) });
   if (onProgresso) onProgresso("IA analisando os documentos... (pode levar 1 a 2 minutos)");
   var raw = await anthropicMessages({ max_tokens: 8000, content: content, signal: signal, timeoutMs: 240000 });
   var arr = extrairJSON(raw);
@@ -744,7 +748,8 @@ export default function App() {
         if (settings.usarIA && settings.key) {
           setProgresso({ msg:"Preparando documentos...", atual:0, total:0 });
           var listaBanco = destDB.filter(function(d){ return d.comarca === comarca || d.comarca === "todos"; });
-          var extraidos = await extrairProcedimentos(arquivosIA, function(msg){ setProgresso({ msg:msg, atual:0, total:0 }); }, ctrl.signal, listaBanco);
+          var municipioCtx = (COMARCAS[comarca] && COMARCAS[comarca].cidade) || "";
+          var extraidos = await extrairProcedimentos(arquivosIA, function(msg){ setProgresso({ msg:msg, atual:0, total:0 }); }, ctrl.signal, listaBanco, municipioCtx);
           brutos = brutos.concat(extraidos);
         } else {
           // sem IA: cria procedimentos vazios a partir do nome do arquivo (para preenchimento manual)
