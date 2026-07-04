@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0a2440"/>
+  <rect x="116" y="96" width="280" height="340" rx="18" fill="#ffffff"/>
+  <rect x="150" y="150" width="212" height="20" rx="10" fill="#1a3a5c"/>
+  <rect x="150" y="196" width="212" height="14" rx="7" fill="#9db4cc"/>
+  <rect x="150" y="228" width="212" height="14" rx="7" fill="#9db4cc"/>
+  <rect x="150" y="260" width="150" height="14" rx="7" fill="#9db4cc"/>
+  <text x="256" y="392" font-family="Georgia, 'Times New Roman', serif" font-size="96" font-weight="bold" fill="#1a7a3a" text-anchor="middle">MP</text>
+</svg>

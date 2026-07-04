@@ -1,0 +1,15 @@
+{
+  "name": "MPBA — Expedição de Ofícios",
+  "short_name": "Expedição MPBA",
+  "description": "Consolidação de despachos e geração de ofícios timbrados, certidões e e-mails — Promotorias de Justiça de Prado, Nova Viçosa e Alcobaça.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a2440",
+  "theme_color": "#0a2440",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -102,6 +102,38 @@ modo imagem da IA.
 - **Banco de destinatários** e **servidores** ficam no `localStorage` e podem ser
   gerenciados pelos botões no topo. Vêm pré-carregados com os dados das três comarcas.
 
+## Recursos de qualidade e produtividade
+
+- **Numeração automática contínua** — o app lembra o último nº de ofício usado por
+  comarca/ano e já sugere o próximo na tela de configuração (com botão "Usar NNN").
+- **Histórico de expedições** — cada ZIP baixado é registrado (data, comarca,
+  servidor, ofícios com nº/destinatário/procedimentos, certidões) e pode ser
+  consultado no botão **Histórico**. Alimenta a numeração automática.
+- **Conferência antes de gerar** — a tela de resultado destaca pendências: ofícios
+  **sem e-mail** (o `.eml` sairia sem destinatário), **sem endereço** e os que
+  precisam ser **conferidos** (destinatário preenchido à mão ou por encaminhamento).
+- **Confiança do destinatário** — cada ofício mostra se o destinatário veio **do
+  banco** (seguro), foi **preenchido manualmente** (conferir) ou é um
+  **encaminhamento** via órgão que abarca.
+- **Prévia e edição do ofício** — botão **Ver / editar** em cada ofício abre a
+  prévia do texto e permite ajustar destinatário, assunto, teor e prazo antes de
+  gerar o `.docx`.
+- **Aprendizado de destinatários** — quando o servidor corrige/identifica um
+  destinatário que a IA não achou, a associação é memorizada e aplicada
+  automaticamente nas próximas expedições.
+- **Uso estimado da IA** — a tela de configuração mostra a estimativa de tokens de
+  entrada consumidos no mês.
+- **Funciona offline / instalável (PWA)** — após a primeira visita, o app abre sem
+  internet (menos a IA e a sincronização em nuvem) e pode ser "instalado" na tela
+  inicial do celular.
+
+## Sincronização em nuvem (Firebase) — segurança
+
+O banco de destinatários sincroniza entre computadores pelo Firebase Realtime
+Database (grátis). Aplique a **regra de segurança** para fechar o acesso público
+do modo de teste: veja [`FIREBASE-REGRAS.md`](./FIREBASE-REGRAS.md)
+(arquivo de regras pronto em `firebase.rules.json`).
+
 ## Atualizar o timbre
 
 Para trocar o modelo timbrado, substitua `web/public/casca.docx` por outro `.docx`

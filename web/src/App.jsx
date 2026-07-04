@@ -473,6 +473,10 @@ async function extrairProcedimentos(files, onProgresso, signal, listaBanco, muni
     }
   }
   content.push({ type:"text", text: PROMPT_EXTRACAO + montarBancoBlock(listaBanco, municipio) });
+  // Estimativa de uso (tokens de entrada) para acompanhamento de custo.
+  var chars = 0;
+  content.forEach(function(b){ if (b.type === "text") chars += (b.text || "").length; else if (b.type === "document" && b.source) chars += Math.round((b.source.data || "").length / 3); });
+  try { registrarUsoTokens(estimarTokens(chars)); } catch (e) {}
   if (onProgresso) onProgresso("IA analisando os documentos... (pode levar 1 a 2 minutos)");
   var raw = await anthropicMessages({ max_tokens: 8000, content: content, signal: signal, timeoutMs: 240000 });
   var arr = extrairJSON(raw);
@@ -566,6 +570,80 @@ function teorEncaminhamento(orgaoOriginal, teorOriginal) {
   return "a Vossa Excel\u00eancia que determine ao \u00f3rg\u00e3o competente \u2014 " + alvo + " \u2014 o atendimento da seguinte provid\u00eancia: " + base + ", com posterior remessa da resposta a esta Promotoria de Justi\u00e7a";
 }
 
+// ============================================================================
+// Persistencia de apoio (tudo em localStorage): historico de expedicoes,
+// numeracao continua por comarca/ano, aprendizado de destinatarios e uso da IA.
+// ============================================================================
+
+// ---- Historico de expedicoes ----
+function carregarHistorico() { try { return JSON.parse(localStorage.getItem("mpba:historico") || "[]"); } catch (e) { return []; } }
+function salvarHistorico(h) { try { localStorage.setItem("mpba:historico", JSON.stringify((h || []).slice(0, 300))); } catch (e) {} }
+
+// ---- Numeracao continua (ultimo n\u00ba de oficio usado por comarca+ano) ----
+function chaveSeq(comarca, ano) { return comarca + ":" + ano; }
+function carregarSeq() { try { return JSON.parse(localStorage.getItem("mpba:seqOficio") || "{}"); } catch (e) { return {}; } }
+function proximoNumeroSugerido(comarca, ano) { var m = carregarSeq(); var last = m[chaveSeq(comarca, ano)]; return last ? (last + 1) : null; }
+function registrarUltimoNumero(comarca, ano, ultimo) {
+  var m = carregarSeq(); var k = chaveSeq(comarca, ano);
+  if (!m[k] || ultimo > m[k]) { m[k] = ultimo; try { localStorage.setItem("mpba:seqOficio", JSON.stringify(m)); } catch (e) {} }
+}
+
+// ---- Aprendizado: de-para "texto que a IA/despacho usou" -> nome no banco ----
+// Quando o servidor corrige/identifica um destinatario, guardamos a associacao
+// para que da proxima vez o mesmo termo caia direto no banco (sem revisao manual).
+function carregarAprendizado() { try { return JSON.parse(localStorage.getItem("mpba:aprendizado") || "{}"); } catch (e) { return {}; } }
+function gravarAprendizado(map) { try { localStorage.setItem("mpba:aprendizado", JSON.stringify(map || {})); } catch (e) {} }
+
+// ---- Uso estimado da IA (tokens de entrada aproximados por mes) ----
+function mesRef(d) { d = d || new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
+function estimarTokens(chars) { return Math.max(0, Math.round((chars || 0) / 4)); }
+function carregarUso() { try { return JSON.parse(localStorage.getItem("mpba:usoIA") || "{}"); } catch (e) { return {}; } }
+function registrarUsoTokens(tokens) {
+  var m = carregarUso(); var k = mesRef(); m[k] = (m[k] || 0) + (tokens || 0);
+  try { localStorage.setItem("mpba:usoIA", JSON.stringify(m)); } catch (e) {}
+  return m[k];
+}
+
+// Texto-previa (leitura humana) do corpo do oficio, espelhando gerarBodyOficio.
+// Usado na tela de conferencia/edicao antes de gerar o .docx.
+function previewTextoOficio(o) {
+  var d = o.dest, itens = o.itens || [];
+  var ehPromotor = o.assinante === "promotor";
+  var L = [];
+  L.push("Of\u00edcio n\u00ba " + o.numOficio);
+  L.push("");
+  L.push((o.promotoriaCidade || "") + ", data da assinatura eletr\u00f4nica.");
+  L.push("");
+  if (d.vocativo) L.push(d.vocativo);
+  if (d.nomeAutoridade) L.push(d.nomeAutoridade);
+  L.push(d.nome || "");
+  if (d.endereco) L.push(d.endereco);
+  if (d.cepCidade) L.push(d.cepCidade);
+  L.push("");
+  L.push("Assunto: " + (o.assunto || "Solicita provid\u00eancias."));
+  L.push("Refer\u00eancia: " + itens.map(function (i) { return i.numProc; }).join("; ") + ".");
+  L.push("");
+  var intro = ehPromotor
+    ? "Cumprimentando-o cordialmente, no uso de minhas atribui\u00e7\u00f5es legais, na qualidade de Promotor de Justi\u00e7a de " + o.promotoriaCidade + ", sirvo-me do presente para solicitar "
+    : "Cumprimentando-o cordialmente e de ordem do Excelent\u00edssimo Senhor Doutor " + o.promotor + ", Promotor de Justi\u00e7a de " + o.promotoriaCidade + ", sirvo-me do presente para solicitar ";
+  if (itens.length === 1) {
+    L.push(intro + (itens[0].teor || "") + ", no prazo de " + (itens[0].prazo || "15 (quinze) dias") + ".");
+  } else {
+    L.push(intro + "o atendimento das dilig\u00eancias abaixo relacionadas, observado, para cada uma, o respectivo prazo de resposta:");
+    itens.forEach(function (it, i) {
+      L.push("    " + (i + 1) + ". Refer\u00eancia " + it.numProc + (it.tipo ? " (" + it.tipo + ")" : "") + ": " + (it.teor || "") + ". Prazo de resposta: " + (it.prazo || "15 (quinze) dias") + ".");
+    });
+  }
+  L.push("");
+  L.push("A resposta dever\u00e1 ser encaminhada para o endere\u00e7o eletr\u00f4nico " + (o.emailResp || ""));
+  L.push("");
+  L.push("Respeitosamente,");
+  L.push("(assinado eletronicamente)");
+  if (ehPromotor) { L.push(o.promotor); L.push("Promotor de Justi\u00e7a de " + o.promotoriaCidade); }
+  else { L.push(o.servNome); L.push(o.servCargo); }
+  return L.join("\n");
+}
+
 export default function App() {
   var [screen, setScreen] = useState("loading");
   var [comarca, setComarca] = useState("prado");
@@ -587,11 +665,20 @@ export default function App() {
   var [modalImport, setModalImport] = useState(false);
   var [settings, setSettings] = useState({ key:"", model:"claude-sonnet-4-6", usarIA:true, promotor:"Rui César Farias dos Santos Júnior" });
   var [showSettings, setShowSettings] = useState(false);
+  var [aprendizadoDB, setAprendizadoDB] = useState({});
+  var [historico, setHistorico] = useState([]);
+  var [usoMes, setUsoMes] = useState(0);
+  var [numTocado, setNumTocado] = useState(false);   // servidor digitou o nº manualmente
+  var [modalEditOficio, setModalEditOficio] = useState(null);
   var fileRef = useRef();
   var bancoFileRef = useRef();
   var abortRef = useRef(null);
 
   useEffect(function() {
+    // Registro do Service Worker (uso offline / instalar como app). So em navegador.
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      try { navigator.serviceWorker.register(import.meta.env.BASE_URL + "sw.js").catch(function(){}); } catch (e) {}
+    }
     (async function() {
       setSettings(carregarSettings());
       var dSaved = await sGet("mpba:dest");
@@ -629,32 +716,44 @@ export default function App() {
       }
       var sList = (sSaved || SERV_INICIAIS).map(function(s){ return Object.assign({ cargo:"" }, s); });
       var c = cSaved || "prado";
-      // Sincronizacao em nuvem (Firebase), se configurada: a nuvem e a fonte compartilhada.
+      // Sincronizacao em nuvem (Firebase) em SEGUNDO PLANO: nunca bloqueia a
+      // abertura do app. Se a nuvem estiver lenta/indisponivel, o app abre
+      // normalmente com o banco local e sincroniza assim que a conexao responder.
+      // (Antes, um await aqui podia travar o app na tela "Carregando...".)
       if (cloudAtivo()) {
-        try {
-          var cloud = await cloudLerBanco();
-          if (cloud && Array.isArray(cloud.destinatarios)) {
-            dList = mesclarMaster(dList, cloud.destinatarios);
-            await sSet("mpba:dest", dList);
-            // se o local tinha itens que a nuvem nao tem, sobe a versao mesclada
-            if (dList.length !== cloud.destinatarios.length) { cloudEscreverBanco(dList).catch(function(){}); }
-          } else {
-            // nuvem vazia -> semeia com o banco atual
-            cloudEscreverBanco(dList).catch(function(){});
-          }
-          cloudObservar(function(remote){
-            if (remote && Array.isArray(remote.destinatarios)) {
-              var m = remote.destinatarios.map(migrarDest);
-              setDestDB(m); sSet("mpba:dest", m);
+        var baseCloud = dList;
+        (async function(){
+          try {
+            var cloud = await cloudLerBanco();
+            if (cloud && Array.isArray(cloud.destinatarios)) {
+              var merged = mesclarMaster(baseCloud, cloud.destinatarios);
+              setDestDB(merged); sSet("mpba:dest", merged);
+              // se o local tinha itens que a nuvem nao tem, sobe a versao mesclada
+              if (merged.length !== cloud.destinatarios.length) { cloudEscreverBanco(merged).catch(function(){}); }
+            } else {
+              // nuvem vazia -> semeia com o banco atual
+              cloudEscreverBanco(baseCloud).catch(function(){});
             }
-          });
-        } catch(e) { console.warn("cloud sync:", e); }
+            cloudObservar(function(remote){
+              if (remote && Array.isArray(remote.destinatarios)) {
+                var m = remote.destinatarios.map(migrarDest);
+                setDestDB(m); sSet("mpba:dest", m);
+              }
+            });
+          } catch(e) { console.warn("cloud sync:", e); }
+        })();
       }
 
       setDestDB(dList);
       setServDB(sList);
       setComarca(c);
       setServAtual(sList.find(function(s) { return s.comarca === c; }) || sList[0] || null);
+      // Apoio: aprendizado, historico, uso da IA e sugestao de numeracao inicial.
+      setAprendizadoDB(carregarAprendizado());
+      setHistorico(carregarHistorico());
+      setUsoMes(carregarUso()[mesRef()] || 0);
+      var sugerido = proximoNumeroSugerido(c, cfg.ano);
+      if (sugerido) setCfg(function(p){ return p.numInicial ? p : Object.assign({}, p, { numInicial: String(sugerido) }); });
       try { var bytes = await carregarCasca(); setCascaBytes(bytes); } catch(e) { console.warn(e); }
       setScreen("main");
     })();
@@ -720,13 +819,32 @@ export default function App() {
     setComarca(c);
     sSet("mpba:comarca", c);
     setServAtual(servDB.find(function(s) { return s.comarca === c; }) || servDB[0] || null);
+    // Se o servidor ainda nao digitou um numero, sugere o proximo desta comarca/ano.
+    if (!numTocado) {
+      var sug = proximoNumeroSugerido(c, cfg.ano);
+      setCfg(function(p){ return Object.assign({}, p, { numInicial: sug ? String(sug) : "" }); });
+    }
+  }
+
+  // Sugestao de numeracao para a comarca/ano atuais (ultimo usado + 1).
+  var numSugerido = proximoNumeroSugerido(comarca, cfg.ano);
+
+  // Registra a associacao "texto usado pela IA/despacho" -> nome escolhido no banco,
+  // para acertar automaticamente nas proximas expedicoes.
+  function aprender(origem, nomeBanco) {
+    var k = normChave(origem);
+    if (!k || !nomeBanco) return;
+    setAprendizadoDB(function(prev){
+      if (prev[k] === nomeBanco) return prev;
+      var m = Object.assign({}, prev); m[k] = nomeBanco; gravarAprendizado(m); return m;
+    });
   }
 
   // Resolve um destinatario (objeto da IA {orgao, bancoNome,...} ou string) contra o banco.
   function resolverDest(item) {
     var ia = typeof item === "object" ? item : {};
     var lista = destDB.filter(function(d) { return d.comarca === comarca || d.comarca === "todos"; });
-    function merge(achado) {
+    function merge(achado, origem) {
       return {
         id: achado.id, chave: achado.chave, nome: achado.nome,
         vocativo: achado.vocativo || ia.vocativo || "",
@@ -734,7 +852,16 @@ export default function App() {
         endereco: achado.endereco || ia.endereco || "",
         cepCidade: achado.cepCidade || ia.cepCidade || "",
         email: achado.email || ia.email || "",
+        origem: origem || "banco",
       };
+    }
+    // 0) Aprendizado: termo ja corrigido pelo servidor antes -> vai direto ao banco.
+    var brutoAP = normChave(ia.orgao || ia.nome || (typeof item === "string" ? item : ""));
+    if (brutoAP && aprendizadoDB[brutoAP]) {
+      var alvoAP = normChave(aprendizadoDB[brutoAP]);
+      var mapd = lista.find(function(d){ return normChave(d.nome) === alvoAP; })
+              || destDB.find(function(d){ return normChave(d.nome) === alvoAP; });
+      if (mapd) return merge(mapd, "banco");
     }
     // 1) Casamento explicito indicado pela IA (bancoNome)
     if (ia.bancoNome && !/identificar/i.test(ia.bancoNome)) {
@@ -802,7 +929,7 @@ export default function App() {
       dils.forEach(function(dil) {
         var r = resolverDest(dil);
         var base = { numProc:numProc, tipo:tipo, tipoCertidao:tipoCertidao, assunto:dil.assunto || "", teor:dil.teor || "", prazo:dil.prazo || "15 (quinze) dias" };
-        if (r) resolvidas.push(Object.assign(base, { dest:r }));
+        if (r) resolvidas.push(Object.assign(base, { dest:r, origem:r.origem || "banco" }));
         else pendentesLocal.push(Object.assign({ id:uid(), textoOriginal: dil.orgao || "Destinatário", ia:dil }, base));
       });
     });
@@ -849,6 +976,7 @@ export default function App() {
           var municipioCtx = (COMARCAS[comarca] && COMARCAS[comarca].cidade) || "";
           var extraidos = await extrairProcedimentos(arquivosIA, function(msg){ setProgresso({ msg:msg, atual:0, total:0 }); }, ctrl.signal, listaBanco, municipioCtx);
           brutos = brutos.concat(extraidos);
+          setUsoMes(carregarUso()[mesRef()] || 0);
         } else {
           // sem IA: cria procedimentos vazios a partir do nome do arquivo (para preenchimento manual)
           arquivosIA.forEach(function(f) {
@@ -878,7 +1006,9 @@ export default function App() {
     var porDest = {};
     diligencias.forEach(function(d) {
       var key = destKey(d.dest);
-      if (!porDest[key]) porDest[key] = { dest:d.dest, itens:[], assuntos:[] };
+      if (!porDest[key]) porDest[key] = { dest:d.dest, itens:[], assuntos:[], origem:d.origem || "banco" };
+      // origem do grupo: "banco" so se TODAS as diligencias vierem do banco.
+      if ((d.origem || "banco") !== "banco") porDest[key].origem = d.origem;
       porDest[key].itens.push({ numProc:d.numProc, tipo:d.tipo, teor:d.teor, prazo:d.prazo });
       if (d.assunto && porDest[key].assuntos.indexOf(d.assunto) === -1) porDest[key].assuntos.push(d.assunto);
     });
@@ -939,9 +1069,16 @@ export default function App() {
         } catch(e) {}
       }
     }
-    var ck = "CHECKLIST - " + comarcaData.label + " - " + cfg.data + "\nServidor: " + servNome + " (" + servCargo + (servAtual.matricula && servAtual.matricula !== "--" ? ", Mat. " + servAtual.matricula : "") + ")\n" + "=".repeat(50) + "\n\n";
+    var semEmailN = grupos.filter(function(g){ return !g.dest.email; }).length;
+    var conferirN = grupos.filter(function(g){ return (g.origem || "banco") !== "banco"; }).length;
+    var ck = "CHECKLIST - " + comarcaData.label + " - " + cfg.data + "\nServidor: " + servNome + " (" + servCargo + (servAtual.matricula && servAtual.matricula !== "--" ? ", Mat. " + servAtual.matricula : "") + ")\nAssinatura: " + ((cfg.assinante === "promotor") ? ("Promotor de Justica (" + promotor + ")") : "Servidor (de ordem do Promotor)") + "\n" + "=".repeat(50) + "\n";
+    ck += "RESUMO: " + grupos.length + " oficio(s), " + certs.length + " certidao(oes).\n";
+    if (semEmailN) ck += "ATENCAO: " + semEmailN + " oficio(s) SEM e-mail (o .eml sai sem destinatario; preencher no Outlook).\n";
+    if (conferirN) ck += "ATENCAO: " + conferirN + " oficio(s) com destinatario preenchido manualmente/encaminhado (conferir).\n";
+    ck += "\n";
     grupos.forEach(function(g, i) {
-      ck += (i+1) + ". Ofício nº " + g.numOficio + " -> " + g.dest.nome + "\n   Email: " + (g.dest.email || "CADASTRAR") + "\n   Referência: " + g.itens.map(function(x){return x.numProc;}).join("; ") + "\n\n";
+      var marca = (g.origem || "banco") === "banco" ? "" : ((g.origem === "encaminhado") ? "  [ENCAMINHADO]" : "  [CONFERIR]");
+      ck += (i+1) + ". Ofício nº " + g.numOficio + " -> " + g.dest.nome + marca + "\n   Email: " + (g.dest.email || "CADASTRAR") + "\n   Referência: " + g.itens.map(function(x){return x.numProc;}).join("; ") + "\n\n";
     });
     arquivos.push({ nome:"0_CHECKLIST.txt", blob:new Blob([ck],{type:"text/plain"}), tipo:"checklist" });
     return arquivos;
@@ -984,6 +1121,31 @@ export default function App() {
     a.click();
     setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
     setProgresso({ msg:"", atual:0, total:0 });
+    // Registra numeracao continua + historico da expedicao (para consulta futura).
+    try {
+      var grps = resultado.grupos || [];
+      var numsFin = grps.map(function(g){ return parseInt(String(g.numOficio).replace(/\D.*$/,""), 10); }).filter(function(n){ return !isNaN(n); });
+      var ano = cfg.ano || String(new Date().getFullYear());
+      if (numsFin.length) { registrarUltimoNumero(comarca, ano, Math.max.apply(null, numsFin)); }
+      var entrada = {
+        id: uid(),
+        dataISO: new Date().toISOString(),
+        dataBR: new Date().toLocaleDateString("pt-BR", { day:"2-digit", month:"2-digit", year:"numeric" }) + " " + new Date().toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" }),
+        comarca: comarca,
+        comarcaLabel: COMARCAS[comarca].label,
+        ano: ano,
+        assinante: cfg.assinante || "servidor",
+        servidor: servAtual ? servAtual.nome : "",
+        oficios: grps.map(function(g){ return { numOficio:g.numOficio, nome:g.dest.nome, email:g.dest.email || "", procs:(g.itens||[]).map(function(x){ return x.numProc; }) }; }),
+        certs: (resultado.certs || []).map(function(c){ return { numProc:c.numProc, tipoCertidao:c.tipoCertidao }; })
+      };
+      var novoHist = [entrada].concat(historico);
+      salvarHistorico(novoHist); setHistorico(novoHist);
+      // Prepara a proxima numeracao (sem exigir digitacao manual na proxima expedicao).
+      setNumTocado(false);
+      var prox = proximoNumeroSugerido(comarca, ano);
+      if (prox) setCfg(function(p){ return Object.assign({}, p, { numInicial: String(prox) }); });
+    } catch (e) { console.warn("historico/seq:", e); }
   }
 
   if (screen === "loading") return React.createElement("div", { style:{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", fontFamily:"Arial" } }, "Carregando...");
@@ -1030,6 +1192,44 @@ export default function App() {
           );
         }),
         modalDest && React.createElement(ModalDest, { dest:modalDest.dest, isNew:modalDest.isNew, comarca:comarca, onClose:function(){setModalDest(null);}, onSave:async function(upd){ if(modalDest.isNew){await salvarDest(destDB.concat([upd]));}else{await salvarDest(destDB.map(function(x){return x.id===upd.id?upd:x;}));} setModalDest(null); } })
+      )
+    );
+  }
+
+  // Tela historico de expedicoes
+  if (screen === "historico") {
+    return React.createElement("div", { style:{ fontFamily:"Arial", minHeight:"100vh", background:C.cinza } },
+      React.createElement(Header, { screen, setScreen, comarca, mudarComarca, onSettings:function(){setShowSettings(true);} }),
+      settingsModal,
+      React.createElement("div", { style:{ maxWidth:820, margin:"0 auto", padding:"20px 14px" } },
+        React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 } },
+          React.createElement("h2", { style:{ margin:0, color:C.azul, fontSize:16 } }, "Histórico de Expedições"),
+          historico.length > 0 && React.createElement("button", { style:btn("#c00",{fontSize:12,padding:"6px 10px"}), onClick:async function(){ if(confirm("Apagar todo o histórico de expedições deste navegador? (não afeta os arquivos já baixados)")){ salvarHistorico([]); setHistorico([]); } } }, "Limpar histórico")
+        ),
+        React.createElement("div", { style:{ fontSize:12, color:"#888", marginBottom:12 } }, "Registro das expedições feitas neste navegador (para consulta e para a numeração automática continuar de onde parou). Fica salvo localmente."),
+        historico.length === 0 && React.createElement("div", { style:Object.assign({}, C.card, { textAlign:"center", color:"#888", padding:32 }) }, "Nenhuma expedição registrada ainda. Ao baixar um pacote ZIP, ele aparece aqui."),
+        historico.map(function(h) {
+          var nums = (h.oficios||[]).map(function(o){ return parseInt(String(o.numOficio).replace(/\D.*$/,""),10); }).filter(function(n){ return !isNaN(n); });
+          var faixa = nums.length ? (String(Math.min.apply(null,nums)).padStart(3,"0") + " a " + String(Math.max.apply(null,nums)).padStart(3,"0")) : "-";
+          return React.createElement("div", { key:h.id, style:C.card },
+            React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap" } },
+              React.createElement("div", null,
+                React.createElement("span", { style:{ fontWeight:"bold", color:C.azul, fontSize:14 } }, h.comarcaLabel + " — " + faixa + "/" + h.ano),
+                React.createElement("span", { style:{ fontSize:12, color:"#888", marginLeft:8 } }, h.dataBR)
+              ),
+              React.createElement("span", { style:{ background:"#e8f0fe", color:C.azul, padding:"2px 8px", borderRadius:10, fontSize:11 } }, (h.oficios||[]).length + " ofício(s) · " + (h.certs||[]).length + " certidão(ões)")
+            ),
+            React.createElement("div", { style:{ fontSize:12, color:"#666", marginTop:4 } }, "Servidor: " + (h.servidor||"-") + " · Assinatura: " + (h.assinante==="promotor"?"Promotor":"Servidor (de ordem)")),
+            React.createElement("div", { style:{ marginTop:8, paddingTop:8, borderTop:"1px solid #f5f5f5" } },
+              (h.oficios||[]).map(function(o, j){
+                return React.createElement("div", { key:j, style:{ fontSize:12, color:"#444", padding:"2px 0" } },
+                  React.createElement("strong", null, "Ofício nº " + o.numOficio),
+                  " — " + o.nome + (o.email?"":" (sem e-mail)") + " · Ref.: " + (o.procs||[]).join("; ")
+                );
+              })
+            )
+          );
+        })
       )
     );
   }
@@ -1097,6 +1297,7 @@ export default function App() {
           ),
           React.createElement("div", { style:{ marginTop:4 } }, "Promotor: ", React.createElement("strong", null, settings.promotor)),
           React.createElement("div", { style:{ marginTop:4 } }, "Promotoria: ", React.createElement("strong", null, COMARCAS[comarca].promotoria)),
+          settings.usarIA && React.createElement("div", { style:{ marginTop:4, fontSize:12, color:"#888" } }, "Uso estimado da IA neste mês: ~", React.createElement("strong", null, (usoMes>=1000? (usoMes/1000).toFixed(usoMes>=10000?0:1)+" mil" : usoMes) + " tokens de entrada"), Object.keys(aprendizadoDB).length ? (" · " + Object.keys(aprendizadoDB).length + " associação(ões) aprendida(s)") : ""),
           React.createElement("div", { style:{ marginTop:10 } },
             React.createElement("label", { style:C.label }, "Quem assina os ofícios?"),
             React.createElement("select", { style:C.input, value:cfg.assinante || "servidor", onChange:function(e){ var v=e.target.value; setCfg(function(p){ return Object.assign({},p,{assinante:v}); }); } },
@@ -1107,11 +1308,15 @@ export default function App() {
           )
         ),
         React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 } },
-          React.createElement("div", null, React.createElement("label", { style:C.label }, "Nº inicial do ofício *"), React.createElement("input", { style:C.input, value:cfg.numInicial, onChange:function(e){setCfg(function(p){return Object.assign({},p,{numInicial:e.target.value});});}, placeholder:"Ex: 95" })),
-          React.createElement("div", null, React.createElement("label", { style:C.label }, "Ano"), React.createElement("input", { style:C.input, value:cfg.ano, onChange:function(e){setCfg(function(p){return Object.assign({},p,{ano:e.target.value});});} })),
+          React.createElement("div", null, React.createElement("label", { style:C.label }, "Nº inicial do ofício *"), React.createElement("input", { style:C.input, value:cfg.numInicial, onChange:function(e){ setNumTocado(true); setCfg(function(p){return Object.assign({},p,{numInicial:e.target.value});}); }, placeholder:"Ex: 95" })),
+          React.createElement("div", null, React.createElement("label", { style:C.label }, "Ano"), React.createElement("input", { style:C.input, value:cfg.ano, onChange:function(e){ var v=e.target.value; setCfg(function(p){ var np=Object.assign({},p,{ano:v}); if(!numTocado){ var s=proximoNumeroSugerido(comarca,v); np.numInicial = s?String(s):""; } return np; }); } })),
           React.createElement("div", null, React.createElement("label", { style:C.label }, "Data (certidão)"), React.createElement("input", { style:C.input, value:cfg.data, onChange:function(e){setCfg(function(p){return Object.assign({},p,{data:e.target.value});});} }))
         ),
-        React.createElement("div", { style:{ fontSize:11, color:"#888", marginTop:6 } }, "O ofício sai numerado como, ex.: 095." + cfg.ano + " e datado como \"data da assinatura eletrônica\"."),
+        numSugerido && React.createElement("div", { style:{ fontSize:12, color:C.verde, marginTop:8, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" } },
+          React.createElement("span", null, "Numeração automática: o último ofício de " + COMARCAS[comarca].label + "/" + cfg.ano + " foi " + String(numSugerido-1).padStart(3,"0") + ". Sugerido: " + String(numSugerido).padStart(3,"0") + "."),
+          String(cfg.numInicial) !== String(numSugerido) && React.createElement("button", { style:btn(C.verde,{padding:"3px 9px",fontSize:11}), onClick:function(){ setNumTocado(false); setCfg(function(p){ return Object.assign({},p,{numInicial:String(numSugerido)}); }); } }, "Usar " + String(numSugerido).padStart(3,"0"))
+        ),
+        React.createElement("div", { style:{ fontSize:11, color:"#888", marginTop:6 } }, "O ofício sai numerado como, ex.: 095." + cfg.ano + " e datado como \"data da assinatura eletrônica\". A numeração continua automaticamente da última expedição."),
         React.createElement("div", { style:{ marginTop:16 } },
           React.createElement("button", { style:btn(), onClick:function(){setStep("fila");} }, "Próximo: Adicionar Despachos / Procedimentos ->")
         )
@@ -1187,13 +1392,19 @@ export default function App() {
           // Nunca gera "Destinatario a identificar".
           var novasDilig = extras.map(function(r){
             if (nomeValido(r.nome)) {
-              return { numProc:r.numProc, tipo:r.tipo, tipoCertidao:r.tipoCertidao||"encaminhamento", assunto:r.assunto||"", teor:r.teor||"", prazo:r.prazo||"15 (quinze) dias", dest:{ nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) } };
+              // Aprendizado: se o termo que a IA usou difere do nome escolhido e o nome
+              // corresponde a um item do banco, memoriza para acertar automaticamente depois.
+              if (r.termoIA && normChave(r.termoIA) !== normChave(r.nome)) {
+                var jaNoBanco = destDB.find(function(d){ return normChave(d.nome) === normChave(r.nome); });
+                if (jaNoBanco || r.salvar) aprender(r.termoIA, r.nome);
+              }
+              return { numProc:r.numProc, tipo:r.tipo, tipoCertidao:r.tipoCertidao||"encaminhamento", assunto:r.assunto||"", teor:r.teor||"", prazo:r.prazo||"15 (quinze) dias", origem:"manual", dest:{ nome:r.nome, vocativo:r.vocativo||"", nomeAutoridade:r.nomeAutoridade||"", endereco:r.endereco||"", cepCidade:r.cepCidade||"", email:r.email||"", chave:r.chave||normChave(r.nome).slice(0,24) } };
             }
             if (r.via) {
               // Encaminhar via orgao abrangente (ex.: Prefeitura) -> em nome da autoridade, que direciona ao setor competente
               var org = destDB.find(function(d){ return d.chave===r.via && (d.comarca===comarca||d.comarca==="todos"); }) || destDB.find(function(d){ return d.chave===r.via; });
               if (org) {
-                return { numProc:r.numProc, tipo:r.tipo, tipoCertidao:r.tipoCertidao||"encaminhamento", assunto:r.assunto||"", teor: teorEncaminhamento(r.originalNome, r.teor), prazo:r.prazo||"15 (quinze) dias",
+                return { numProc:r.numProc, tipo:r.tipo, tipoCertidao:r.tipoCertidao||"encaminhamento", assunto:r.assunto||"", teor: teorEncaminhamento(r.originalNome, r.teor), prazo:r.prazo||"15 (quinze) dias", origem:"encaminhado",
                   dest:{ id:org.id, nome:org.nome, vocativo:org.vocativo||"A Sua Excelência o Senhor", nomeAutoridade:org.nomeAutoridade||"", endereco:org.endereco||"", cepCidade:org.cepCidade||"", email:org.email||"", chave:org.chave } };
               }
             }
@@ -1216,12 +1427,42 @@ export default function App() {
             );
           })
         ),
+        // Conferencia antes de gerar: destaca pendencias (sem e-mail, sem endereco, a conferir).
+        (function(){
+          var gs = resultado.grupos || [];
+          var semEmail = gs.filter(function(g){ return !g.dest.email; });
+          var semEnd = gs.filter(function(g){ return !g.dest.endereco && !g.dest.cepCidade; });
+          var conferir = gs.filter(function(g){ return (g.origem || "banco") !== "banco"; });
+          if (!semEmail.length && !semEnd.length && !conferir.length) {
+            return React.createElement("div", { key:"conf", style:{ background:"#eafaf0", border:"1px solid #bfe6cd", borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:13, color:"#1a7a3a" } }, "✓ Conferência: todos os " + gs.length + " ofício(s) com destinatário do banco, e-mail e endereço preenchidos. Pronto para gerar.");
+          }
+          return React.createElement("div", { key:"conf", style:{ background:"#fffbeb", border:"1px solid #f5e090", borderRadius:10, padding:"12px 14px", marginBottom:14, fontSize:13, color:"#7a5c00" } },
+            React.createElement("div", { style:{ fontWeight:"bold", marginBottom:6 } }, "Conferência antes de gerar — pontos de atenção:"),
+            React.createElement("ul", { style:{ margin:"0 0 0 18px", padding:0, lineHeight:1.7 } },
+              semEmail.length ? React.createElement("li", { key:"e" }, React.createElement("strong", null, semEmail.length + " ofício(s) sem e-mail"), " — o .eml sairá sem destinatário (\"Para:\") e precisará ser preenchido à mão no Outlook. Use \"Ver / editar\" para incluir o e-mail.") : null,
+              semEnd.length ? React.createElement("li", { key:"a" }, semEnd.length + " ofício(s) sem endereço no corpo do documento (não impede o envio por e-mail).") : null,
+              conferir.length ? React.createElement("li", { key:"c" }, React.createElement("strong", null, conferir.length + " ofício(s) a conferir"), " — destinatário preenchido manualmente ou por encaminhamento (não veio direto do banco).") : null
+            )
+          );
+        })(),
         React.createElement("div", { style:C.card },
-          React.createElement("h3", { style:{ margin:"0 0 12px", color:C.azul, fontSize:14 } }, "Ofícios (com juntada por destinatário)"),
+          React.createElement("h3", { style:{ margin:"0 0 4px", color:C.azul, fontSize:14 } }, "Ofícios (com juntada por destinatário)"),
+          React.createElement("div", { style:{ fontSize:12, color:"#666", marginBottom:12 } }, "Clique em \"Ver / editar\" para conferir o texto completo e ajustar destinatário, assunto, teor ou prazo antes de gerar."),
           resultado.grupos.map(function(g, i) {
+            var org = g.origem || "banco";
+            var badge = org === "banco" ? { t:"✓ do banco", bg:"#eafaf0", cor:"#1a7a3a", bd:"#bfe6cd" }
+                     : org === "encaminhado" ? { t:"↪ encaminhado", bg:"#f5f0ff", cor:"#5b21b6", bd:"#e0d4ff" }
+                     : { t:"⚠ conferir", bg:"#fffbeb", cor:"#7a5c00", bd:"#f5e090" };
             return React.createElement("div", { key:i, style:{ border:"1px solid #e8f0fe", borderRadius:8, padding:12, marginBottom:10 } },
-              React.createElement("div", { style:{ fontWeight:"bold", color:C.azul, fontSize:14 } }, "Ofício nº " + g.numOficio + " - " + g.dest.nome),
-              React.createElement("div", { style:{ fontSize:12, marginTop:3, color: g.dest.email ? C.verde : "#c66" } }, g.dest.email ? "Email: " + g.dest.email : "Email não cadastrado - preencher antes de enviar"),
+              React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, flexWrap:"wrap" } },
+                React.createElement("div", { style:{ fontWeight:"bold", color:C.azul, fontSize:14 } }, "Ofício nº " + g.numOficio + " - " + g.dest.nome),
+                React.createElement("div", { style:{ display:"flex", gap:6, alignItems:"center" } },
+                  React.createElement("span", { style:{ background:badge.bg, color:badge.cor, border:"1px solid "+badge.bd, padding:"2px 8px", borderRadius:10, fontSize:11, fontWeight:"bold" } }, badge.t),
+                  React.createElement("button", { style:btn(C.azul,{padding:"4px 10px",fontSize:11}), onClick:function(){ setModalEditOficio({ idx:i }); } }, "Ver / editar")
+                )
+              ),
+              React.createElement("div", { style:{ fontSize:12, marginTop:3, color: g.dest.email ? C.verde : "#c66", fontWeight: g.dest.email ? "normal" : "bold" } }, g.dest.email ? "Email: " + g.dest.email : "⚠ Email não cadastrado — o e-mail sairá sem destinatário; preencha em \"Ver / editar\"."),
+              !g.dest.endereco && !g.dest.cepCidade && React.createElement("div", { style:{ fontSize:11, marginTop:2, color:"#c66" } }, "Sem endereço no corpo do ofício."),
               g.assunto && React.createElement("div", { style:{ fontSize:12, marginTop:3, color:"#555" } }, "Assunto: " + g.assunto),
               React.createElement("div", { style:{ marginTop:8, paddingTop:8, borderTop:"1px solid #f5f5f5" } },
                 g.itens.map(function(item, j) {
@@ -1258,7 +1499,32 @@ export default function App() {
           ),
           progresso.msg && React.createElement("div", { style:{ marginTop:12, background:"#e8f0fe", borderRadius:8, padding:10, textAlign:"center", fontSize:13, color:C.azul } }, progresso.msg + (progresso.total>0?" ("+progresso.atual+"/"+progresso.total+")":""))
         ),
-        React.createElement("button", { style:btnOut(), onClick:function(){ setStep("fila"); setResultado(null); setProcs([]); } }, "<- Nova expedição")
+        React.createElement("button", { style:btnOut(), onClick:function(){ setStep("fila"); setResultado(null); setProcs([]); } }, "<- Nova expedição"),
+        modalEditOficio && resultado.grupos[modalEditOficio.idx] && React.createElement(ModalEditOficio, {
+          grupo: resultado.grupos[modalEditOficio.idx],
+          ctx: {
+            promotor: settings.promotor || "Rui César Farias dos Santos Júnior",
+            promotoriaCidade: COMARCAS[comarca].promotoriaCidade || COMARCAS[comarca].cidade,
+            assinante: cfg.assinante || "servidor",
+            emailResp: COMARCAS[comarca].email,
+            servNome: servAtual ? servAtual.nome : "",
+            servCargo: servAtual ? (servAtual.cargo || "Servidor(a)") : ""
+          },
+          onClose: function(){ setModalEditOficio(null); },
+          onSave: function(novoGrupo){
+            var idx = modalEditOficio.idx;
+            setResultado(function(prev){
+              var grupos = prev.grupos.map(function(g, i){ return i === idx ? novoGrupo : g; });
+              var antigoNome = prev.grupos[idx].dest.nome;
+              // Se o nome do destinatario mudou, reflete nas certidoes (lista de expedicoes).
+              var certs = prev.certs.map(function(c){
+                return Object.assign({}, c, { exps: c.exps.map(function(e){ return e.numOficio === novoGrupo.numOficio ? Object.assign({}, e, { nome:novoGrupo.dest.nome }) : e; }) });
+              });
+              return Object.assign({}, prev, { grupos:grupos, certs:certs });
+            });
+            setModalEditOficio(null);
+          }
+        })
       )
     )
   );
@@ -1278,6 +1544,7 @@ function Header(props) {
       }),
       React.createElement("button", { onClick:function(){setScreen(screen==="banco"?"main":"banco");}, style:{ background:"rgba(255,255,255,.15)", border:"none", color:"white", padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer" } }, "Destinatários"),
       React.createElement("button", { onClick:function(){setScreen(screen==="servidores"?"main":"servidores");}, style:{ background:"rgba(255,255,255,.15)", border:"none", color:"white", padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer" } }, "Servidores"),
+      React.createElement("button", { onClick:function(){setScreen(screen==="historico"?"main":"historico");}, style:{ background:"rgba(255,255,255,.15)", border:"none", color:"white", padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer" } }, "Histórico"),
       onSettings && React.createElement("button", { onClick:onSettings, style:{ background:"rgba(255,255,255,.15)", border:"none", color:"white", padding:"4px 10px", borderRadius:6, fontSize:11, cursor:"pointer" } }, "Config")
     )
   );
@@ -1429,6 +1696,62 @@ function ModalServ(props) {
   );
 }
 
+// Conferencia/edicao de um oficio antes de gerar o .docx: mostra a previa do texto
+// e permite ajustar destinatario, assunto e o teor/prazo de cada diligencia.
+function ModalEditOficio(props) {
+  var g = props.grupo; var ctx = props.ctx;
+  var [dest, setDest] = useState(Object.assign({ nome:"", vocativo:"", nomeAutoridade:"", endereco:"", cepCidade:"", email:"" }, g.dest));
+  var [assunto, setAssunto] = useState(g.assunto || "");
+  var [itens, setItens] = useState((g.itens || []).map(function(it){ return Object.assign({}, it); }));
+  function fd(k, v) { setDest(function(p){ return Object.assign({},p,{[k]:v}); }); }
+  function fi(idx, k, v) { setItens(function(prev){ return prev.map(function(it,i){ return i===idx ? Object.assign({},it,{[k]:v}) : it; }); }); }
+  var previa = previewTextoOficio({ dest:dest, itens:itens, numOficio:g.numOficio, assunto:assunto, promotor:ctx.promotor, promotoriaCidade:ctx.promotoriaCidade, emailResp:ctx.emailResp, servNome:ctx.servNome, servCargo:ctx.servCargo, assinante:ctx.assinante });
+  return React.createElement("div", { style:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:16 } },
+    React.createElement("div", { style:{ background:"white", borderRadius:12, padding:24, width:"100%", maxWidth:760, maxHeight:"92vh", overflowY:"auto" } },
+      React.createElement("h3", { style:{ margin:"0 0 4px", color:C.azul } }, "Conferir / editar — Ofício nº " + g.numOficio),
+      React.createElement("p", { style:{ margin:"0 0 14px", fontSize:12, color:"#777" } }, "As alterações valem para este ofício. A prévia à direita atualiza em tempo real."),
+      React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 } },
+        // Coluna esquerda: campos editaveis
+        React.createElement("div", { style:{ display:"grid", gap:10 } },
+          React.createElement("div", { style:{ fontWeight:"bold", fontSize:12, color:C.azul } }, "Destinatário"),
+          React.createElement("div", null, React.createElement("label", { style:C.label }, "Órgão / Nome"), React.createElement("input", { style:C.input, value:dest.nome||"", onChange:function(e){fd("nome",e.target.value);} })),
+          React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 } },
+            React.createElement("div", null, React.createElement("label", { style:C.label }, "Vocativo"), React.createElement("input", { style:C.input, value:dest.vocativo||"", onChange:function(e){fd("vocativo",e.target.value);} })),
+            React.createElement("div", null, React.createElement("label", { style:C.label }, "Nome da autoridade"), React.createElement("input", { style:C.input, value:dest.nomeAutoridade||"", onChange:function(e){fd("nomeAutoridade",e.target.value);} }))
+          ),
+          React.createElement("div", null, React.createElement("label", { style:C.label }, "Endereço"), React.createElement("input", { style:C.input, value:dest.endereco||"", onChange:function(e){fd("endereco",e.target.value);} })),
+          React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 } },
+            React.createElement("div", null, React.createElement("label", { style:C.label }, "CEP / Cidade"), React.createElement("input", { style:C.input, value:dest.cepCidade||"", onChange:function(e){fd("cepCidade",e.target.value);} })),
+            React.createElement("div", null, React.createElement("label", { style:Object.assign({},C.label,{color: dest.email?"#555":"#c66"}) }, "Email" + (dest.email?"":" (vazio)")), React.createElement("input", { style:Object.assign({},C.input, dest.email?null:{borderColor:"#e6a"}), value:dest.email||"", onChange:function(e){fd("email",e.target.value);}, placeholder:"email@dominio.gov.br" }))
+          ),
+          React.createElement("div", null, React.createElement("label", { style:C.label }, "Assunto"), React.createElement("input", { style:C.input, value:assunto, onChange:function(e){setAssunto(e.target.value);} })),
+          React.createElement("div", { style:{ fontWeight:"bold", fontSize:12, color:C.azul, marginTop:4 } }, "Diligências (teor e prazo)"),
+          itens.map(function(it, idx){
+            return React.createElement("div", { key:idx, style:{ border:"1px solid #eee", borderRadius:8, padding:8 } },
+              React.createElement("div", { style:{ fontSize:11, color:"#888", marginBottom:4 } }, "Referência " + it.numProc + (it.tipo?" ("+it.tipo+")":"")),
+              React.createElement("textarea", { style:Object.assign({},C.input,{minHeight:52,resize:"vertical"}), value:it.teor||"", onChange:function(e){fi(idx,"teor",e.target.value);}, placeholder:"teor da diligência" }),
+              React.createElement("div", { style:{ marginTop:6 } }, React.createElement("label", { style:C.label }, "Prazo"), React.createElement("input", { style:C.input, value:it.prazo||"", onChange:function(e){fi(idx,"prazo",e.target.value);}, placeholder:"15 (quinze) dias" }))
+            );
+          })
+        ),
+        // Coluna direita: previa do texto
+        React.createElement("div", null,
+          React.createElement("div", { style:{ fontWeight:"bold", fontSize:12, color:C.azul, marginBottom:6 } }, "Prévia do ofício"),
+          React.createElement("pre", { style:{ whiteSpace:"pre-wrap", fontFamily:"Georgia, 'Times New Roman', serif", fontSize:12, lineHeight:1.5, background:"#fbfbfb", border:"1px solid #eee", borderRadius:8, padding:12, margin:0, maxHeight:"60vh", overflowY:"auto" } }, previa),
+          React.createElement("div", { style:{ fontSize:11, color:"#999", marginTop:6 } }, "O documento final sai timbrado e formatado (Times New Roman). Esta prévia mostra apenas o texto.")
+        )
+      ),
+      React.createElement("div", { style:{ display:"flex", gap:10, marginTop:18 } },
+        React.createElement("button", { style:btnOut({flex:1}), onClick:props.onClose }, "Cancelar"),
+        React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){
+          if (!dest.nome || !dest.nome.trim()) { alert("O ofício precisa de um destinatário (Órgão/Nome)."); return; }
+          props.onSave(Object.assign({}, g, { dest:dest, assunto:assunto, itens:itens }));
+        } }, "Salvar alterações")
+      )
+    )
+  );
+}
+
 function TelaProcessando(props) {
   var [seg, setSeg] = useState(0);
   useEffect(function() {
@@ -1518,7 +1841,7 @@ function TelaResolucao(props) {
       React.createElement("button", { style:btn(C.verde,{flex:1}), onClick:function(){
         var pendentesSem = itens.filter(function(x){ var nomeOk = x.form.nome && x.form.nome.trim() && !/identificar/i.test(x.form.nome); return !nomeOk && !x.via; });
         if (pendentesSem.length > 0) { alert(pendentesSem.length + " destinatário(s) ainda sem identificação. Para cada um: preencha o Órgão/Nome OU escolha \"Encaminhar via\" um órgão. (Se quiser ignorá-los, use o botão \"Pular\".)"); return; }
-        onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,via:x.via||"",originalNome:x.form.nome||x.textoOriginal||"",numProc:x.numProc,tipo:x.tipo,tipoCertidao:x.tipoCertidao,assunto:x.assunto,teor:x.teor,prazo:x.prazo}); }));
+        onConfirmar(itens.map(function(x){ return Object.assign({},x.form,{salvar:x.salvar,via:x.via||"",originalNome:x.form.nome||x.textoOriginal||"",termoIA:(x.ia&&x.ia.orgao)||x.textoOriginal||"",numProc:x.numProc,tipo:x.tipo,tipoCertidao:x.tipoCertidao,assunto:x.assunto,teor:x.teor,prazo:x.prazo}); }));
       } }, "Confirmar e gerar ofícios")
     )
   );

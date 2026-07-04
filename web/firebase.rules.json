@@ -1,0 +1,12 @@
+{
+  "rules": {
+    "mpba": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "$outros": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}
