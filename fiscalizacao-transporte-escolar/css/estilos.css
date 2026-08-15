@@ -43,6 +43,23 @@ html, body {
   box-shadow: var(--sombra);
 }
 .topo-linha { display: flex; align-items: center; gap: 10px; }
+.topo-texto { flex: 1; min-width: 0; }
+.status-nuvem {
+  background: rgba(255, 255, 255, .16);
+  border: none;
+  color: #fff;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 34px;
+}
+.status-nuvem.erro { background: rgba(255, 190, 180, .3); }
+.status-nuvem.pendente { background: rgba(242, 183, 5, .35); }
+.passos { margin: 0; padding-left: 20px; font-size: .84rem; line-height: 1.5; }
+.passos li { margin-bottom: 4px; }
 .topo h1 { font-size: 1rem; margin: 0; font-weight: 700; line-height: 1.2; }
 .topo .logo { font-size: 1.6rem; }
 .contexto { font-size: .78rem; opacity: .9; margin-top: 2px; }

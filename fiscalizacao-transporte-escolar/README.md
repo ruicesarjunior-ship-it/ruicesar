@@ -24,9 +24,12 @@ relatório com todas as irregularidades apontadas — no mesmo padrão do
   observações montado automaticamente), conclusão/providências e anexo
   fotográfico. Exportação em **PDF (impressão)**, **.doc (Word, editável)** e
   **CSV (planilha)**.
-- **Backup e consolidação da equipe**: cada agente exporta um arquivo `.json` e o
-  coordenador importa todos; veículos com a mesma placa são consolidados,
-  prevalecendo a versão mais recente.
+- **Sincronização da equipe (opcional)**: todos os agentes trabalham na mesma
+  operação; cada aparelho grava offline e envia sozinho quando há sinal, e o
+  coordenador acompanha ao vivo quantos veículos cada agente já fiscalizou.
+- **Backup em arquivo**: alternativa para operações sem sinal — cada agente
+  exporta um `.json` e o coordenador importa todos; veículos com a mesma placa
+  são consolidados, prevalecendo a versão mais recente.
 
 ## Itens fiscalizados
 
@@ -88,6 +91,48 @@ python3 -m http.server 8000
    iPhone: botão Compartilhar → *Adicionar à Tela de Início*.
 3. Depois de aberto uma vez, o aplicativo funciona **sem sinal de internet**.
 
+## Sincronização entre os inspetores
+
+Sem nenhuma configuração, o aplicativo funciona só no aparelho e a consolidação é
+feita por arquivo. Para que a equipe trabalhe integrada, configure uma vez o
+servidor de sincronização:
+
+1. Crie um projeto gratuito em [supabase.com](https://supabase.com).
+2. Em *SQL Editor → New query*, cole o conteúdo de **`supabase/schema.sql`** e
+   execute. Isso cria as tabelas e as funções de acesso.
+3. Em *Project Settings → API*, copie a **Project URL** e a chave **anon public**.
+4. No aplicativo, aba **Equipe**, cole os dois valores. Faça isso em cada aparelho
+   da equipe (ou publique o app já com os campos preenchidos por cada um).
+
+Depois disso:
+
+- O **coordenador** abre *Equipe*, define um **código** (ex.: `PRADO2026`) e uma
+  **senha** da operação e toca em **Criar operação**.
+- Cada **agente** informa o mesmo código e senha e toca em **Entrar na operação** —
+  não precisa criar fiscalização: os dados vêm da nuvem.
+- A partir daí a sincronização é automática: ao concluir cada veículo, a cada
+  minuto, ao reabrir o aplicativo e assim que o sinal volta. O ícone na barra
+  superior mostra `☁️` (em dia), `⬆️ n` (n registros na fila), `📴` (sem sinal)
+  ou `⚠️` (erro).
+- O **painel da equipe** mostra quantos veículos cada agente já enviou e o horário
+  do último envio.
+
+**Como os conflitos são resolvidos**: a identidade do veículo é a **placa**. Se
+dois agentes abordarem o mesmo veículo, prevalece a edição mais recente; exclusões
+feitas em um aparelho alcançam os demais. O relatório final é sempre montado a
+partir do aparelho do coordenador, que numera os veículos na ordem em que os
+recebeu.
+
+**Segurança**: as tabelas ficam inacessíveis com a chave pública (RLS ligado e sem
+policies); todo acesso passa por funções que exigem o código e a senha da operação,
+gravada com hash bcrypt. Use uma senha própria por operação e não a divulgue fora
+da equipe. O tráfego é HTTPS.
+
+**Sinal ruim**: nada trava. O registro é gravado no aparelho e vai para a fila; as
+fotos sobem no máximo 8 por rodada para não prender a sincronização, e é possível
+desmarcar *"Enviar também as fotos"* para economizar dados — elas sobem depois,
+quando marcar de novo.
+
 ## Roteiro de uso em campo
 
 1. **Antes de sair**: em *Dados*, preencha número do relatório, data, município,
@@ -96,17 +141,22 @@ python3 -m http.server 8000
    lateral com a faixa, o interior e cada irregularidade → percorra o checklist
    marcando apenas o que estiver irregular → use **✓ Tudo conforme** para fechar
    os itens restantes → *Salvar e próximo veículo*.
-3. **Ao final do dia**: cada agente vai em *Backup → Exportar com fotos* e envia o
-   arquivo ao coordenador.
-4. **No gabinete**: o coordenador importa os arquivos em *Backup*, revisa em
-   *Dados* o texto de conclusão (há um modelo pronto no botão
+3. **Ao final do dia**: com sincronização ativa, basta conferir em *Equipe* se a
+   fila está zerada. Sem sincronização, cada agente vai em
+   *Equipe → Exportar com fotos* e envia o arquivo ao coordenador.
+4. **No gabinete**: o coordenador confere o painel (ou importa os arquivos),
+   revisa em *Dados* o texto de conclusão (há um modelo pronto no botão
    *Inserir modelo de conclusão*) e emite o relatório em *Relatório*.
 
 ## Privacidade e cuidados
 
-- Os dados ficam **somente no aparelho** (IndexedDB). Nada é enviado a servidores.
-- Limpar os dados de navegação do celular apaga a fiscalização — **exporte backup
-  todo dia**.
+- Sem sincronização, os dados ficam **somente no aparelho** (IndexedDB).
+- Com sincronização ativa, os dados dos condutores e as fotos passam a residir
+  também no projeto Supabase do próprio usuário — avalie a adequação à LGPD e às
+  normas internas antes de usar em operação real, e apague a operação da nuvem
+  quando o relatório estiver concluído.
+- Limpar os dados de navegação do celular apaga a fiscalização local — **exporte
+  backup todo dia**, mesmo usando a nuvem.
 - O relatório contém dados pessoais de condutores; trate o arquivo conforme a LGPD
   e as normas de sigilo do Ministério Público.
 
@@ -121,6 +171,8 @@ js/store.js              modelo de dados e regras (placas, irregularidades, esta
 js/db.js                 armazenamento local (IndexedDB)
 js/fotos.js              captura e compressão das imagens
 js/relatorio.js          montagem do relatório, CSS de impressão e CSV
-js/backup.js             exportação/importação e consolidação da equipe
+js/backup.js             exportação/importação por arquivo
+js/nuvem.js              sincronização da equipe (opcional)
+supabase/schema.sql      banco e funções de acesso da sincronização
 sw.js                    funcionamento offline
 ```

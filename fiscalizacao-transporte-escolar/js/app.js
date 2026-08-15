@@ -7,7 +7,7 @@
  *   #/veiculos    lista de veículos
  *   #/veiculo/ID  ficha do veículo
  *   #/relatorio   relatório final
- *   #/backup      backup / consolidação da equipe
+ *   #/equipe      sincronização da equipe e backup em arquivo
  */
 
 import { GRUPOS, ITENS, TIPOS_VEICULO, MEDIDAS, GRAVIDADE_LABEL } from './checklist.js';
@@ -16,9 +16,11 @@ import * as fotosApi from './fotos.js';
 import { uso } from './db.js';
 import { montarRelatorio, documentoCompleto, gerarCSV, esc, dataCurta, CSS_RELATORIO } from './relatorio.js';
 import * as backup from './backup.js';
+import * as nuvem from './nuvem.js';
 
 const app = document.getElementById('app');
 const areaImpressao = document.getElementById('area-impressao');
+const btnStatusNuvem = document.getElementById('status-nuvem');
 
 let fisc = null; // fiscalização atual
 let urlsTemporarias = [];
@@ -626,18 +628,22 @@ function ligarFichaVeiculo(v) {
 
   document.getElementById('excluir').onclick = async () => {
     if (!confirm('Excluir este veículo e suas fotos?')) return;
+    await nuvem.marcarRemocao(fisc, v); // a exclusão precisa alcançar os demais aparelhos
     await store.excluirVeiculo(v.id);
     await store.renumerar(v.fiscalizacaoId);
     ir('#/veiculos');
     toast('Veículo excluído.', 'aviso');
+    sincronizarAgora();
   };
   document.getElementById('concluir').onclick = async () => {
     await store.salvarVeiculo(v);
     ir('#/veiculos');
+    sincronizarAgora();
   };
   document.getElementById('proximo').onclick = async () => {
     await store.salvarVeiculo(v);
     criarVeiculo();
+    sincronizarAgora();
   };
 }
 
@@ -799,14 +805,17 @@ async function viewRelatorio() {
 
 // --------------------------------------------------------------------- backup
 
-async function viewBackup() {
+async function viewEquipe() {
   const lista = await store.listarFiscalizacoes();
   app.innerHTML = `
+    <div id="area-nuvem"></div>
+
     <section class="cartao">
-      <h2>Backup e consolidação da equipe</h2>
+      <h2>Backup em arquivo</h2>
       <p class="ajuda">
-        Cada agente exporta o arquivo <b>.json</b> da sua fiscalização e envia ao coordenador.
-        Ao importar, veículos com a mesma placa são consolidados (prevalece a versão mais recente).
+        Alternativa para quando não houver sinal em campo: cada agente exporta o arquivo
+        <b>.json</b> e envia ao coordenador. Ao importar, veículos com a mesma placa são
+        consolidados (prevalece a versão mais recente).
       </p>
       ${
         fisc
@@ -840,10 +849,12 @@ async function viewBackup() {
     <section class="cartao">
       <h3>Segurança dos dados</h3>
       <p class="ajuda">
-        Os dados ficam apenas neste aparelho. Limpar os dados do navegador apaga tudo.
-        Exporte um backup ao final de cada dia de fiscalização.
+        Sem sincronização, os dados ficam apenas neste aparelho e limpar os dados do navegador
+        apaga tudo. Exporte um backup ao final de cada dia de fiscalização, mesmo usando a nuvem.
       </p>
     </section>`;
+
+  await renderNuvem();
 
   document.getElementById('exp-fotos')?.addEventListener('click', () => exportarBackup(true));
   document.getElementById('exp-sem')?.addEventListener('click', () => exportarBackup(false));
@@ -879,6 +890,280 @@ async function exportarBackup(comFotos) {
   await backup.compartilharOuBaixar(JSON.stringify(pacote), nome, 'application/json');
 }
 
+// -------------------------------------------------- sincronização da equipe
+
+async function renderNuvem() {
+  const area = document.getElementById('area-nuvem');
+  if (!area) return;
+  const cfg = nuvem.configNuvem();
+
+  if (!cfg) {
+    area.innerHTML = `
+      <section class="cartao destaque">
+        <h2>Sincronização da equipe</h2>
+        <p class="ajuda">
+          Com o servidor configurado, todos os agentes trabalham na mesma operação: cada aparelho
+          grava offline e envia sozinho assim que houver sinal, e o coordenador acompanha a
+          produção ao vivo. Configure uma vez e informe apenas o <b>código da operação</b> à equipe.
+        </p>
+        <details class="grupo">
+          <summary><span>⚙️ Como obter esses dados</span></summary>
+          <div class="item-check">
+            <ol class="passos">
+              <li>Crie um projeto gratuito em <b>supabase.com</b>.</li>
+              <li>Em <i>SQL Editor → New query</i>, cole o conteúdo de <b>supabase/schema.sql</b> e execute.</li>
+              <li>Em <i>Project Settings → API</i>, copie a <b>Project URL</b> e a chave <b>anon public</b>.</li>
+              <li>Cole os dois campos abaixo. A chave pública sozinha não dá acesso a nada:
+                  é preciso o código e a senha da operação.</li>
+            </ol>
+          </div>
+        </details>
+        ${campo('Endereço do projeto (Project URL)', 'n_url', '', { placeholder: 'https://xxxx.supabase.co' })}
+        ${campo('Chave pública (anon public)', 'n_chave', '', { placeholder: 'eyJhbGciOi...' })}
+        <button class="btn primario" id="n_salvar">Salvar configuração</button>
+      </section>`;
+    document.getElementById('n_salvar').onclick = () => {
+      const url = document.getElementById('n_url').value.trim();
+      const chave = document.getElementById('n_chave').value.trim();
+      if (!/^https?:\/\//.test(url) || chave.length < 20) {
+        return toast('Verifique o endereço e a chave.', 'aviso');
+      }
+      nuvem.definirConfigNuvem(url, chave);
+      toast('Servidor configurado.');
+      renderNuvem();
+      atualizarStatusNuvem();
+    };
+    return;
+  }
+
+  if (!fisc || !fisc.sala) {
+    // Sem fiscalização local o agente ainda pode (e deve) entrar na operação:
+    // a fiscalização é criada automaticamente a partir dos dados da nuvem.
+    area.innerHTML = `
+      <section class="cartao destaque">
+        <h2>Sincronização da equipe</h2>
+        <p class="ajuda">
+          O <b>coordenador</b> cria a operação e passa o código e a senha à equipe.
+          Cada agente entra com esses mesmos dados no seu aparelho.
+        </p>
+        <div class="grade-2">
+          ${campo('Código da operação', 'n_codigo', fisc ? sugerirCodigo() : '', { placeholder: 'PRADO2026' })}
+          ${campo('Senha da operação', 'n_senha', '', { placeholder: 'mínimo 4 caracteres' })}
+        </div>
+        <div class="acoes">
+          <button class="btn primario grande" id="n_entrar">🔑 Entrar na operação</button>
+          ${fisc ? '<button class="btn grande" id="n_criar">🆕 Criar operação</button>' : ''}
+        </div>
+        <p class="ajuda">
+          “Entrar” vincula este aparelho a uma operação já criada e traz os dados dos demais agentes.
+          ${fisc ? '“Criar” envia <b>esta</b> fiscalização para a nuvem — use apenas no aparelho do coordenador.' : ''}
+        </p>
+        ${botaoTrocarServidorHTML()}
+      </section>`;
+
+    const ler = () => ({
+      codigo: document.getElementById('n_codigo').value.trim(),
+      senha: document.getElementById('n_senha').value,
+    });
+    document.getElementById('n_criar')?.addEventListener('click', async () => {
+      const { codigo, senha } = ler();
+      try {
+        toast('Criando operação…');
+        await nuvem.criarSala(fisc, codigo, senha);
+        await sincronizarAgora({ silencioso: false });
+        renderNuvem();
+      } catch (e) {
+        toast(e.message, 'aviso');
+      }
+    });
+    document.getElementById('n_entrar').onclick = async () => {
+      const { codigo, senha } = ler();
+      try {
+        toast('Entrando na operação…');
+        const vinculada = await nuvem.entrarSala(fisc || null, codigo, senha);
+        store.definirFiscalizacaoAtual(vinculada.id);
+        fisc = await store.obterFiscalizacao(vinculada.id);
+        await sincronizarAgora({ silencioso: false });
+        atualizarBarraTopo();
+        renderNuvem();
+        toast('Aparelho vinculado à operação.');
+      } catch (e) {
+        toast(e.message, 'aviso');
+      }
+    };
+    ligarTrocaServidor();
+    return;
+  }
+
+  const pend = await nuvem.pendencias(fisc);
+  area.innerHTML = `
+    <section class="cartao destaque">
+      <div class="cartao-topo">
+        <h2>Operação ${esc(fisc.sala.codigo)}</h2>
+        <span class="selo ${pend.veiculos || pend.fotos ? 'aviso' : 'ok'}" id="n_pend">
+          ${pend.veiculos || pend.fotos ? `${pend.veiculos} veíc. / ${pend.fotos} fotos pendentes` : 'tudo sincronizado'}
+        </span>
+      </div>
+      <p class="ajuda">
+        Última sincronização: ${fisc.sala.ultimoSync ? esc(new Date(fisc.sala.ultimoSync).toLocaleString('pt-BR')) : 'ainda não sincronizado'}.
+        ${navigator.onLine ? '' : '<b>Aparelho sem conexão</b> — os registros sobem assim que houver sinal.'}
+      </p>
+      <label class="campo linha-check">
+        <input type="checkbox" id="n_fotos" ${autoFotos() ? 'checked' : ''}>
+        <span>Enviar também as fotos (desmarque se o sinal estiver ruim)</span>
+      </label>
+      <div class="acoes">
+        <button class="btn primario grande" id="n_sync">🔄 Sincronizar agora</button>
+        <button class="btn" id="n_painel">📊 Atualizar painel</button>
+        <button class="btn perigo" id="n_sair">Desvincular aparelho</button>
+      </div>
+      <div id="n_resultado"></div>
+    </section>
+
+    <section class="cartao">
+      <h3>Painel da equipe</h3>
+      <div id="n_painel_area"><p class="vazio">Toque em “Atualizar painel”.</p></div>
+    </section>`;
+
+  document.getElementById('n_fotos').onchange = (e) => {
+    localStorage.setItem('fte:autoFotos', e.target.checked ? '1' : '0');
+  };
+  document.getElementById('n_sync').onclick = () => sincronizarAgora({ silencioso: false });
+  document.getElementById('n_sair').onclick = async () => {
+    if (!confirm('Desvincular este aparelho da operação? Os dados já registrados permanecem aqui.')) return;
+    await nuvem.sairSala(fisc);
+    fisc = await store.obterFiscalizacao(fisc.id);
+    renderNuvem();
+    atualizarStatusNuvem();
+  };
+  document.getElementById('n_painel').onclick = carregarPainel;
+  carregarPainel();
+}
+
+function botaoTrocarServidorHTML() {
+  return '<button class="btn pequeno" id="n_trocar">Trocar servidor de sincronização</button>';
+}
+
+function ligarTrocaServidor() {
+  document.getElementById('n_trocar')?.addEventListener('click', () => {
+    if (!confirm('Remover a configuração do servidor deste aparelho?')) return;
+    nuvem.definirConfigNuvem(null, null);
+    renderNuvem();
+    atualizarStatusNuvem();
+  });
+}
+
+function sugerirCodigo() {
+  const m = (fisc?.municipio || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8);
+  return `${m || 'OPERACAO'}${fisc?.ano || ''}`;
+}
+
+function autoFotos() {
+  return localStorage.getItem('fte:autoFotos') !== '0';
+}
+
+async function carregarPainel() {
+  const area = document.getElementById('n_painel_area');
+  if (!area || !fisc?.sala) return;
+  try {
+    const p = await nuvem.painel(fisc);
+    area.innerHTML = `
+      <div class="painel-numeros">
+        <div><b>${p.veiculos}</b><span>veículos na nuvem</span></div>
+        <div><b>${p.fotos}</b><span>fotos</span></div>
+        <div><b>${p.agentes.length}</b><span>agentes</span></div>
+      </div>
+      <ul class="lista">
+        ${p.agentes
+          .map(
+            (a) => `<li class="item-lista">
+              <div class="link-item">
+                <b>${esc(a.agente)}</b>
+                <small>último envio: ${a.ultimo ? esc(new Date(a.ultimo).toLocaleString('pt-BR')) : '—'}</small>
+              </div>
+              <span class="selo">${a.veiculos} veíc.</span>
+            </li>`
+          )
+          .join('')}
+      </ul>`;
+  } catch (e) {
+    area.innerHTML = `<div class="alerta-box">${esc(e.message)}</div>`;
+  }
+}
+
+/** Executa a sincronização e atualiza os avisos da tela. */
+async function sincronizarAgora({ silencioso = true } = {}) {
+  if (!fisc?.sala || !nuvem.nuvemConfigurada() || nuvem.estaSincronizando()) return null;
+  if (!navigator.onLine) {
+    if (!silencioso) toast('Aparelho sem conexão.', 'aviso');
+    return null;
+  }
+  try {
+    if (!silencioso) toast('Sincronizando…');
+    marcarStatusNuvem('sincronizando');
+    const r = await nuvem.sincronizar(fisc.id, { comFotos: autoFotos() });
+    fisc = await store.obterFiscalizacao(fisc.id);
+    const resumo = `Enviados ${r.enviados} veículo(s) e ${r.fotosEnviadas} foto(s); recebidos ${r.recebidos} veículo(s) e ${r.fotosRecebidas} foto(s).`;
+    const alvo = document.getElementById('n_resultado');
+    if (alvo) {
+      alvo.innerHTML = `<div class="ok-box">${esc(resumo)}${
+        r.fotosPendentes ? ` <b>${r.fotosPendentes} foto(s) ainda na fila</b> — toque novamente para continuar.` : ''
+      }</div>`;
+    }
+    if (!silencioso) toast('Sincronização concluída.');
+    await atualizarStatusNuvem();
+    if (!silencioso && document.getElementById('n_painel_area')) carregarPainel();
+    if ((r.recebidos || r.apagados) && ['#/veiculos', '#/relatorio', '#/'].includes(location.hash || '#/')) {
+      render();
+    }
+    return r;
+  } catch (e) {
+    marcarStatusNuvem('erro');
+    const alvo = document.getElementById('n_resultado');
+    if (alvo) alvo.innerHTML = `<div class="alerta-box">${esc(e.message)}</div>`;
+    if (!silencioso) toast(e.message, 'aviso');
+    return null;
+  }
+}
+
+function marcarStatusNuvem(estado, texto) {
+  if (!btnStatusNuvem) return;
+  btnStatusNuvem.hidden = !fisc?.sala || !nuvem.nuvemConfigurada();
+  btnStatusNuvem.className = `status-nuvem ${estado}`;
+  const rotulos = { sincronizando: '⏳', ok: '☁️', pendente: '⬆️', erro: '⚠️', offline: '📴' };
+  btnStatusNuvem.textContent = `${rotulos[estado] || '☁️'}${texto ? ` ${texto}` : ''}`;
+}
+
+async function atualizarStatusNuvem() {
+  if (!btnStatusNuvem) return;
+  if (!fisc?.sala || !nuvem.nuvemConfigurada()) {
+    btnStatusNuvem.hidden = true;
+    return;
+  }
+  const p = await nuvem.pendencias(fisc);
+  const total = (p?.veiculos || 0) + (p?.fotos || 0);
+  const selo = document.getElementById('n_pend');
+  if (selo) {
+    selo.className = `selo ${total ? 'aviso' : 'ok'}`;
+    selo.textContent = total ? `${p.veiculos} veíc. / ${p.fotos} fotos pendentes` : 'tudo sincronizado';
+  }
+  if (!navigator.onLine) return marcarStatusNuvem('offline');
+  marcarStatusNuvem(total ? 'pendente' : 'ok', total ? String(total) : '');
+}
+
+function iniciarAutoSync() {
+  const tentar = () => sincronizarAgora({ silencioso: true });
+  setInterval(tentar, 60000);
+  window.addEventListener('online', () => {
+    atualizarStatusNuvem();
+    tentar();
+  });
+  window.addEventListener('offline', atualizarStatusNuvem);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) tentar();
+  });
+}
+
 // ------------------------------------------------------------------- roteador
 
 function semFiscalizacao() {
@@ -902,6 +1187,7 @@ async function render() {
   const hash = location.hash || '#/';
   const [, rota, param] = hash.split('/');
   atualizarBarraTopo();
+  atualizarStatusNuvem();
   document.querySelectorAll('.nav-item').forEach((b) => {
     b.classList.toggle('ativo', b.dataset.rota === `#/${rota || ''}`);
   });
@@ -919,8 +1205,9 @@ async function render() {
       return viewVeiculo(param);
     case 'relatorio':
       return viewRelatorio();
+    case 'equipe':
     case 'backup':
-      return viewBackup();
+      return viewEquipe();
     default:
       return viewInicio();
   }
@@ -953,7 +1240,10 @@ async function iniciar() {
   document.querySelectorAll('.nav-item').forEach((b) => {
     b.onclick = () => ir(b.dataset.rota);
   });
+  btnStatusNuvem.onclick = () => ir('#/equipe');
   await render();
+  iniciarAutoSync();
+  sincronizarAgora();
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

@@ -3,7 +3,7 @@
  * Estratégia: cache-first para o "casco" do app, com atualização em segundo plano.
  */
 
-const CACHE = 'fte-v1';
+const CACHE = 'fte-v2';
 const ARQUIVOS = [
   './',
   './index.html',
@@ -16,6 +16,7 @@ const ARQUIVOS = [
   './js/checklist.js',
   './js/relatorio.js',
   './js/backup.js',
+  './js/nuvem.js',
   './icons/icone.svg',
   './icons/icone-mascarado.svg',
 ];
