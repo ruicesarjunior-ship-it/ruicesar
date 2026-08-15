@@ -1,6 +1,12 @@
 name: Publicar app web (GitHub Pages)
 
 # Publica o app de web/ no GitHub Pages a cada push neste branch.
+#
+# O site do Pages é único por repositório e hospeda dois apps:
+#   /ruicesar/               este app (expedição de ofícios)
+#   /ruicesar/fiscalizacao/  app de fiscalização do transporte escolar
+# Por isso a publicação daqui também precisa levar o app de fiscalização
+# junto — caso contrário ele sairia do ar a cada push neste branch.
 on:
   push:
     branches:
@@ -32,6 +38,28 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      # Os dois passos abaixo são tolerantes a falhas de propósito: se o branch
+      # do app de fiscalização for renomeado ou removido, este deploy continua
+      # funcionando, apenas sem a pasta /fiscalizacao/.
+      - name: Baixar o app de fiscalização do transporte escolar
+        id: baixar-fiscalizacao
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: claude/school-transport-inspection-app-rj223v
+          path: fiscalizacao
+
+      - name: Incluir o app de fiscalização em /fiscalizacao/
+        if: steps.baixar-fiscalizacao.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p web/dist/fiscalizacao
+          cd fiscalizacao/fiscalizacao-transporte-escolar
+          cp -r index.html manifest.webmanifest sw.js css js icons ../../web/dist/fiscalizacao/
+          cp dist/fiscalizacao-transporte-escolar.html ../../web/dist/fiscalizacao/arquivo-unico.html
+
       - name: Configurar Pages
         uses: actions/configure-pages@v5
       - name: Enviar artefato
@@ -49,5 +77,3 @@ jobs:
       - name: Publicar no Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
-# trigger redeploy
