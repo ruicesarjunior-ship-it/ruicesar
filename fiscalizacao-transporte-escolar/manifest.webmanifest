@@ -1,0 +1,26 @@
+{
+  "name": "Fiscalização do Transporte Escolar",
+  "short_name": "Fisc. Escolar",
+  "description": "Aplicativo de campo para fiscalização do transporte escolar pelo Ministério Público, com registro fotográfico e geração de relatório.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6f5",
+  "theme_color": "#0f4c3a",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "./icons/icone.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icone-mascarado.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
