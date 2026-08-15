@@ -254,7 +254,7 @@ html, body {
 }
 .grupo > summary::-webkit-details-marker { display: none; }
 
-.item-check { padding: 10px 12px; border-top: 1px solid var(--borda); }
+.item-check, .bloco-detalhe { padding: 10px 12px; border-top: 1px solid var(--borda); }
 .item-check-titulo b { display: block; font-size: .9rem; line-height: 1.3; }
 .item-check-titulo small { display: block; color: var(--texto-fraco); font-size: .72rem; margin-top: 2px; }
 .opcoes { display: flex; gap: 6px; margin-top: 8px; }

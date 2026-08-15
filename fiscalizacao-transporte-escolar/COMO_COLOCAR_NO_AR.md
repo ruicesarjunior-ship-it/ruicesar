@@ -67,9 +67,11 @@ estar liberado para usuários autenticados:
    sem sinal, fica na fila.
 5. **No gabinete**: aba *Equipe* → confira o painel; aba *Relatório* → *Gerar* →
    *Imprimir / salvar PDF* ou *Baixar .doc*.
-6. **Para extrair dados com IA**: aba *Relatório* → **🤖 Pacote para IA (.zip)** →
-   entregue o arquivo ao assistente. Ele já vem com as fotos separadas por tipo,
-   os dados estruturados e as instruções de leitura.
+6. **Extração pela IA**: aba *Relatório* → **🤖 Pacote para IA (.zip)** → entregue
+   o arquivo ao assistente. Ele devolve um `.json` com os dados lidos dos
+   documentos; volte em *Relatório* → **📥 Importar extração da IA** e escolha
+   *Cancelar* na pergunta para preencher apenas os campos vazios. Depois confira
+   ficha a ficha: as preenchidas pela IA trazem aviso de procedência.
 
 ---
 

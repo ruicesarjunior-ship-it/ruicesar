@@ -369,19 +369,22 @@ async function viewVeiculo(id) {
       </label>
       <div class="grade-2">
         ${select('Tipo', 'v_tipo', v.tipo, TIPOS_VEICULO)}
-        ${campo('Marca/modelo', 'v_marcaModelo', v.marcaModelo, { placeholder: 'Ex.: Mercedes Sprinter' })}
-        ${campo('Ano', 'v_ano', v.ano, { inputmode: 'numeric', maxlength: 4 })}
-        ${campo('Cor', 'v_cor', v.cor)}
-        ${campo('Lotação', 'v_lotacao', v.lotacao, { inputmode: 'numeric' })}
-        ${campo('Escolares a bordo', 'v_alunosBordo', v.alunosBordo, { inputmode: 'numeric' })}
+        ${campo('Escolares a bordo', 'v_alunosBordo', v.alunosBordo, { inputmode: 'numeric', ajuda: 'Contagem no momento da abordagem' })}
       </div>
-      ${campo('Permissionário / empresa', 'v_permissionario', v.permissionario)}
-      ${campo('Rota / escola atendida', 'v_escolaRota', v.escolaRota)}
+      <label class="campo linha-check">
+        <input type="checkbox" id="v_monitorPossui" ${v.monitorPossui ? 'checked' : ''}>
+        <span>Monitor/acompanhante presente</span>
+      </label>
     </section>
 
     <section class="cartao">
       <h3>Registro fotográfico</h3>
-      <p class="ajuda">Registre, no mínimo: a placa, a lateral com a faixa ESCOLAR, o interior (cintos) e cada irregularidade constatada.</p>
+      <p class="ajuda">
+        <b>📄 Documento:</b> CNH (frente), CRLV e autorização para transporte escolar —
+        é daí que os dados do condutor e do veículo serão extraídos.<br>
+        <b>📷 Veículo:</b> a placa, a lateral com a faixa ESCOLAR, o interior (cintos)
+        e cada irregularidade constatada.
+      </p>
       <div class="acoes">
         <label class="btn primario arquivo">📄 Documento
           <input type="file" accept="image/*" capture="environment" multiple hidden id="cam-doc">
@@ -400,20 +403,45 @@ async function viewVeiculo(id) {
     </section>
 
     <section class="cartao">
-      <h3>Condutor</h3>
-      ${campo('Nome', 'v_condutorNome', v.condutorNome)}
-      <div class="grade-2">
-        ${campo('CPF', 'v_condutorCpf', v.condutorCpf, { inputmode: 'numeric' })}
-        ${campo('Telefone', 'v_condutorTelefone', v.condutorTelefone, { inputmode: 'tel' })}
-        ${campo('Nº da CNH', 'v_condutorCnh', v.condutorCnh, { inputmode: 'numeric' })}
-        ${campo('Categoria', 'v_condutorCategoria', v.condutorCategoria, { placeholder: 'D, E…' })}
-        ${campo('Validade da CNH', 'v_condutorValidadeCnh', v.condutorValidadeCnh, { tipo: 'date' })}
-      </div>
-      <label class="campo linha-check">
-        <input type="checkbox" id="v_monitorPossui" ${v.monitorPossui ? 'checked' : ''}>
-        <span>Monitor/acompanhante presente</span>
-      </label>
-      ${campo('Nome do monitor', 'v_monitorNome', v.monitorNome)}
+      <details class="grupo" ${temDadosDigitados(v) ? 'open' : ''}>
+        <summary>
+          <span>📝 Dados do condutor e do veículo</span>
+          <span class="selos">${
+            v.extraidoIA
+              ? '<span class="selo aviso">preenchido pela IA</span>'
+              : '<span class="selo">a IA preenche</span>'
+          }</span>
+        </summary>
+        <div class="bloco-detalhe">
+          <p class="ajuda">
+            Não é preciso digitar em campo: fotografe a CNH, o CRLV e a autorização
+            com o botão <b>📄 Documento</b>. Depois, o pacote para IA devolve estes
+            campos preenchidos. Digite apenas o que a foto não resolver.
+          </p>
+          ${
+            v.extraidoIA
+              ? `<div class="alerta-box">Preenchido pela IA em ${esc(new Date(v.extraidoIA.em).toLocaleString('pt-BR'))}
+                 (${v.extraidoIA.campos.length} campo(s)). <b>Confira antes de assinar o relatório.</b></div>`
+              : ''
+          }
+          ${campo('Condutor — nome', 'v_condutorNome', v.condutorNome)}
+          <div class="grade-2">
+            ${campo('CPF', 'v_condutorCpf', v.condutorCpf, { inputmode: 'numeric' })}
+            ${campo('Telefone', 'v_condutorTelefone', v.condutorTelefone, { inputmode: 'tel' })}
+            ${campo('Nº da CNH', 'v_condutorCnh', v.condutorCnh, { inputmode: 'numeric' })}
+            ${campo('Categoria', 'v_condutorCategoria', v.condutorCategoria, { placeholder: 'D, E…' })}
+            ${campo('Validade da CNH', 'v_condutorValidadeCnh', v.condutorValidadeCnh, { tipo: 'date' })}
+            ${campo('Nome do monitor', 'v_monitorNome', v.monitorNome)}
+            ${campo('Marca/modelo', 'v_marcaModelo', v.marcaModelo, { placeholder: 'Ex.: Mercedes Sprinter' })}
+            ${campo('Ano', 'v_ano', v.ano, { inputmode: 'numeric', maxlength: 4 })}
+            ${campo('Cor', 'v_cor', v.cor)}
+            ${campo('RENAVAM', 'v_renavam', v.renavam, { inputmode: 'numeric' })}
+            ${campo('Lotação', 'v_lotacao', v.lotacao, { inputmode: 'numeric' })}
+          </div>
+          ${campo('Permissionário / empresa', 'v_permissionario', v.permissionario)}
+          ${campo('Rota / escola atendida', 'v_escolaRota', v.escolaRota)}
+        </div>
+      </details>
     </section>
 
     <section class="cartao" id="secao-checklist">
@@ -611,6 +639,15 @@ function itemChecklistHTML(item, v) {
     </div>`;
 }
 
+/** Há algo preenchido nos campos que a IA costuma extrair? */
+function temDadosDigitados(v) {
+  return !!(
+    v.condutorNome || v.condutorCpf || v.condutorCnh || v.condutorCategoria ||
+    v.marcaModelo || v.ano || v.cor || v.renavam || v.lotacao ||
+    v.permissionario || v.escolaRota || v.monitorNome || v.extraidoIA
+  );
+}
+
 function fotoHTML(f) {
   return `
     <figure class="foto" data-foto="${f.id}">
@@ -641,6 +678,7 @@ function ligarFichaVeiculo(v) {
     });
   };
   texto('v_marcaModelo', 'marcaModelo');
+  texto('v_renavam', 'renavam');
   texto('v_ano', 'ano');
   texto('v_cor', 'cor');
   texto('v_lotacao', 'lotacao');
@@ -713,7 +751,7 @@ function ligarFichaVeiculo(v) {
   if (modoChecklist() === 'rapido') ligarChecklistRapido(v, salvar);
 
   // checklist — modo completo
-  app.querySelectorAll('.item-check').forEach((div) => {
+  app.querySelectorAll('.item-check[data-item]').forEach((div) => {
     const itemId = div.dataset.item;
     div.querySelectorAll('.op').forEach((btn) => {
       btn.onclick = () => {
@@ -901,6 +939,9 @@ async function viewRelatorio() {
         <button class="btn" id="doc">📝 Baixar .doc (Word)</button>
         <button class="btn" id="csv">📊 Baixar planilha (CSV)</button>
         <button class="btn" id="pacote">🤖 Pacote para IA (.zip)</button>
+        <label class="btn arquivo">📥 Importar extração da IA
+          <input type="file" accept="application/json,.json" hidden id="extracao">
+        </label>
       </div>
     </section>
     <section class="cartao previa">
@@ -947,6 +988,42 @@ async function viewRelatorio() {
     const r = await gerarPacoteIA(fisc, veiculos, { comFotos: comFotos() });
     await backup.compartilharOuBaixar(r.blob, r.nome, 'application/zip');
     toast(`Pacote com ${r.fotos} foto(s) e os dados estruturados.`);
+  };
+
+  document.getElementById('extracao').onchange = async (e) => {
+    const arquivo = e.target.files[0];
+    e.target.value = '';
+    if (!arquivo) return;
+    const alvo = document.getElementById('previa');
+    try {
+      const pacote = JSON.parse(await arquivo.text());
+      const sobrescrever = confirm(
+        'Sobrescrever os campos que já estão preenchidos?\n\n' +
+          'OK = a leitura da IA prevalece.\n' +
+          'Cancelar = preenche apenas os campos vazios (recomendado).'
+      );
+      const r = await store.importarExtracao(fisc.id, pacote, { sobrescrever });
+      const veiculosAtualizados = await store.listarVeiculos(fisc.id);
+      veiculos.length = 0;
+      veiculos.push(...veiculosAtualizados);
+      alvo.innerHTML = `
+        <div class="ok-box">
+          <b>${r.atualizados.length} veículo(s) preenchido(s) pela extração.</b>
+          ${r.semNovidade.length ? `<br>${r.semNovidade.length} sem campos novos.` : ''}
+          ${
+            r.semCorrespondencia.length
+              ? `<br><b>Sem correspondência de placa:</b> ${esc(r.semCorrespondencia.join(', '))}.`
+              : ''
+          }
+          <ul>${r.atualizados
+            .map((a) => `<li>${esc(a.placa)}: ${esc(a.campos.join(', '))}</li>`)
+            .join('')}</ul>
+          Confira os dados na ficha de cada veículo antes de assinar o relatório.
+        </div>`;
+      toast('Extração importada.');
+    } catch (err) {
+      alvo.innerHTML = `<div class="alerta-box">${esc(err.message)}</div>`;
+    }
   };
 
   document.getElementById('csv').onclick = async () => {
@@ -1066,7 +1143,7 @@ async function renderNuvem() {
         </p>
         <details class="grupo">
           <summary><span>⚙️ Como obter esses dados</span></summary>
-          <div class="item-check">
+          <div class="bloco-detalhe">
             <ol class="passos">
               <li>Crie um projeto gratuito em <b>supabase.com</b>.</li>
               <li>Em <i>SQL Editor → New query</i>, cole o conteúdo de <b>supabase/schema.sql</b> e execute.</li>

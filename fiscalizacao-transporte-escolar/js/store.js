@@ -237,6 +237,73 @@ export function consolidar(veiculos) {
   };
 }
 
+// ------------------------------------------------- extração a partir das fotos
+
+/** Campos que a leitura das fotografias pode preencher. */
+export const CAMPOS_EXTRAIVEIS = [
+  'condutorNome', 'condutorCpf', 'condutorCnh', 'condutorCategoria', 'condutorValidadeCnh',
+  'condutorTelefone', 'monitorNome', 'marcaModelo', 'ano', 'cor', 'renavam', 'lotacao',
+  'permissionario', 'escolaRota',
+];
+
+/**
+ * Aplica a um veículo os campos lidos das fotografias.
+ *
+ * Por padrão só preenche o que está vazio: o que o agente digitou em campo
+ * prevalece sobre a leitura automática. A procedência fica registrada em
+ * `extraidoIA` para conferência antes da assinatura do relatório.
+ *
+ * @returns {string[]} campos efetivamente preenchidos
+ */
+export function aplicarExtracao(veiculo, campos, { sobrescrever = false } = {}) {
+  const preenchidos = [];
+  for (const chave of CAMPOS_EXTRAIVEIS) {
+    const valor = campos?.[chave];
+    if (valor === undefined || valor === null || String(valor).trim() === '') continue;
+    const atual = String(veiculo[chave] || '').trim();
+    if (atual && !sobrescrever) continue;
+    if (atual === String(valor).trim()) continue;
+    veiculo[chave] = String(valor).trim();
+    preenchidos.push(chave);
+  }
+  if (preenchidos.length) {
+    veiculo.extraidoIA = {
+      em: new Date().toISOString(),
+      campos: preenchidos,
+      fontes: campos?.fontes || null,
+    };
+  }
+  return preenchidos;
+}
+
+/** Aplica um arquivo de extração inteiro, casando os veículos pela placa. */
+export async function importarExtracao(fiscalizacaoId, pacote, { sobrescrever = false } = {}) {
+  if (!pacote || !Array.isArray(pacote.veiculos)) {
+    throw new Error('Arquivo não reconhecido — esperava um JSON com a lista "veiculos".');
+  }
+  const locais = await listarVeiculos(fiscalizacaoId);
+  const porPlaca = new Map(locais.filter((v) => v.placa).map((v) => [v.placa, v]));
+  const relatorio = { atualizados: [], semCorrespondencia: [], semNovidade: [] };
+
+  for (const item of pacote.veiculos) {
+    const placa = normalizarPlaca(item.placa);
+    const alvo = porPlaca.get(placa);
+    if (!alvo) {
+      relatorio.semCorrespondencia.push(item.placa || '(sem placa)');
+      continue;
+    }
+    const campos = item.campos && typeof item.campos === 'object' ? item.campos : item;
+    const preenchidos = aplicarExtracao(alvo, campos, { sobrescrever });
+    if (preenchidos.length) {
+      await salvarVeiculo(alvo);
+      relatorio.atualizados.push({ placa: formatarPlaca(placa), campos: preenchidos });
+    } else {
+      relatorio.semNovidade.push(formatarPlaca(placa));
+    }
+  }
+  return relatorio;
+}
+
 // --------------------------------------------------------- backup / mesclagem
 
 /** Aplica os dados de um veículo importado sobre a base local. */

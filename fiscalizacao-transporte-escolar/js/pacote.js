@@ -10,7 +10,7 @@
  * compressão (JPEG já é comprimido) usando o formato ZIP mais simples.
  */
 
-import { irregularidades, frasesIrregularidades, consolidar, formatarPlaca } from './store.js';
+import { irregularidades, frasesIrregularidades, consolidar, formatarPlaca, CAMPOS_EXTRAIVEIS } from './store.js';
 import { fotosDaFiscalizacao } from './fotos.js';
 import { ITENS, GRAVIDADE_LABEL } from './checklist.js';
 import { dataCurta } from './relatorio.js';
@@ -166,17 +166,65 @@ Ministério Público, com apoio da Polícia Militar.
   registrou: \`documento\`, \`placa\`, \`faixa\`, \`interior\`, \`irregularidade\`
   ou \`outra\`.
 
-## Tarefas usuais
+## Tarefa principal — extrair os dados dos documentos
 
-1. **Extrair dados dos documentos**: nas fotos marcadas como \`documento\`, ler
-   CNH (número, categoria, validade, nome e CPF do condutor), CRLV (placa,
-   RENAVAM, marca/modelo, ano, categoria) e a autorização para transporte
-   escolar. Devolver em JSON, indicando o arquivo de origem de cada campo.
-2. **Conferir contra o coletado**: comparar o que foi lido com os campos de
-   \`dados.json\` e apontar divergências, em vez de sobrescrever.
-3. **Não inventar**: campo ilegível deve voltar como \`null\`, com a observação
-   de que a foto não permite a leitura. Trata-se de instrução de documento
-   oficial — dado presumido compromete o relatório.
+Em campo o agente fotografa e quase não digita. Cabe a você ler as fotos
+marcadas como \`documento\` e devolver os campos abaixo, por veículo:
+
+| Campo | Onde costuma estar |
+| --- | --- |
+| \`condutorNome\`, \`condutorCpf\` | CNH |
+| \`condutorCnh\` (número de registro), \`condutorCategoria\`, \`condutorValidadeCnh\` | CNH |
+| \`marcaModelo\`, \`ano\`, \`cor\`, \`renavam\`, \`lotacao\` | CRLV |
+| \`permissionario\` | CRLV (proprietário) ou autorização |
+| \`escolaRota\`, \`monitorNome\`, \`condutorTelefone\` | autorização/contrato, quando constar |
+
+### Formato da resposta
+
+Devolva **um arquivo .json** exatamente nesta forma — o aplicativo o importa de
+volta em *Relatório → Importar extração da IA*, casando os veículos pela placa:
+
+\`\`\`json
+{
+  "formato": "fiscalizacao-transporte-escolar/extracao/1",
+  "veiculos": [
+    {
+      "placa": "ABC-1D23",
+      "campos": {
+        "condutorNome": "…",
+        "condutorCpf": "…",
+        "condutorCnh": "…",
+        "condutorCategoria": "D",
+        "condutorValidadeCnh": "2027-05-10",
+        "marcaModelo": "…",
+        "ano": "2014",
+        "cor": "…",
+        "renavam": "…",
+        "lotacao": "20",
+        "permissionario": "…",
+        "fontes": { "condutorNome": "fotos/veiculo-01_abc1d23_documento_1.jpg" }
+      },
+      "naoLegivel": ["condutorCpf"],
+      "observacoes": "CPF encoberto pelo reflexo do plástico."
+    }
+  ]
+}
+\`\`\`
+
+Datas em \`AAAA-MM-DD\`. Números (CPF, CNH, RENAVAM) apenas com dígitos.
+
+### Regras
+
+1. **Não inventar.** Campo ilegível não entra em \`campos\`: entra em
+   \`naoLegivel\`, com a explicação em \`observacoes\`. É documento oficial — dado
+   presumido compromete o relatório e pode induzir a uma imputação indevida.
+2. **Não corrigir o que o agente registrou.** Se a leitura divergir do que já
+   consta em \`dados.json\`, mantenha o valor lido em \`campos\` e **aponte a
+   divergência em \`observacoes\`**; a decisão é do promotor.
+3. **A placa manda.** Use a placa do \`dados.json\` para identificar o veículo,
+   não a lida na foto — é ela que casa os registros na volta.
+4. **Irregularidades não se extraem de foto.** A constatação é do agente em
+   campo; não acrescente nem remova itens do checklist.
 
 ## Cuidado
 
@@ -277,6 +325,7 @@ export async function gerarPacoteIA(fisc, veiculos, { comFotos = true } = {}) {
         veiculos: r.qtd,
       })),
     },
+    camposAExtrairDasFotos: CAMPOS_EXTRAIVEIS,
     catalogoDeItens: ITENS.map((i) => ({
       id: i.id,
       titulo: i.titulo,

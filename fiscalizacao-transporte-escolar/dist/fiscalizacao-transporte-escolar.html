@@ -258,7 +258,7 @@ html, body {
 }
 .grupo > summary::-webkit-details-marker { display: none; }
 
-.item-check { padding: 10px 12px; border-top: 1px solid var(--borda); }
+.item-check, .bloco-detalhe { padding: 10px 12px; border-top: 1px solid var(--borda); }
 .item-check-titulo b { display: block; font-size: .9rem; line-height: 1.3; }
 .item-check-titulo small { display: block; color: var(--texto-fraco); font-size: .72rem; margin-top: 2px; }
 .opcoes { display: flex; gap: 6px; margin-top: 8px; }
@@ -1368,6 +1368,73 @@ function consolidar(veiculos) {
   };
 }
 
+// ------------------------------------------------- extração a partir das fotos
+
+/** Campos que a leitura das fotografias pode preencher. */
+const CAMPOS_EXTRAIVEIS = [
+  'condutorNome', 'condutorCpf', 'condutorCnh', 'condutorCategoria', 'condutorValidadeCnh',
+  'condutorTelefone', 'monitorNome', 'marcaModelo', 'ano', 'cor', 'renavam', 'lotacao',
+  'permissionario', 'escolaRota',
+];
+
+/**
+ * Aplica a um veículo os campos lidos das fotografias.
+ *
+ * Por padrão só preenche o que está vazio: o que o agente digitou em campo
+ * prevalece sobre a leitura automática. A procedência fica registrada em
+ * `extraidoIA` para conferência antes da assinatura do relatório.
+ *
+ * @returns {string[]} campos efetivamente preenchidos
+ */
+function aplicarExtracao(veiculo, campos, { sobrescrever = false } = {}) {
+  const preenchidos = [];
+  for (const chave of CAMPOS_EXTRAIVEIS) {
+    const valor = campos?.[chave];
+    if (valor === undefined || valor === null || String(valor).trim() === '') continue;
+    const atual = String(veiculo[chave] || '').trim();
+    if (atual && !sobrescrever) continue;
+    if (atual === String(valor).trim()) continue;
+    veiculo[chave] = String(valor).trim();
+    preenchidos.push(chave);
+  }
+  if (preenchidos.length) {
+    veiculo.extraidoIA = {
+      em: new Date().toISOString(),
+      campos: preenchidos,
+      fontes: campos?.fontes || null,
+    };
+  }
+  return preenchidos;
+}
+
+/** Aplica um arquivo de extração inteiro, casando os veículos pela placa. */
+async function importarExtracao(fiscalizacaoId, pacote, { sobrescrever = false } = {}) {
+  if (!pacote || !Array.isArray(pacote.veiculos)) {
+    throw new Error('Arquivo não reconhecido — esperava um JSON com a lista "veiculos".');
+  }
+  const locais = await listarVeiculos(fiscalizacaoId);
+  const porPlaca = new Map(locais.filter((v) => v.placa).map((v) => [v.placa, v]));
+  const relatorio = { atualizados: [], semCorrespondencia: [], semNovidade: [] };
+
+  for (const item of pacote.veiculos) {
+    const placa = normalizarPlaca(item.placa);
+    const alvo = porPlaca.get(placa);
+    if (!alvo) {
+      relatorio.semCorrespondencia.push(item.placa || '(sem placa)');
+      continue;
+    }
+    const campos = item.campos && typeof item.campos === 'object' ? item.campos : item;
+    const preenchidos = aplicarExtracao(alvo, campos, { sobrescrever });
+    if (preenchidos.length) {
+      await salvarVeiculo(alvo);
+      relatorio.atualizados.push({ placa: formatarPlaca(placa), campos: preenchidos });
+    } else {
+      relatorio.semNovidade.push(formatarPlaca(placa));
+    }
+  }
+  return relatorio;
+}
+
 // --------------------------------------------------------- backup / mesclagem
 
 /** Aplica os dados de um veículo importado sobre a base local. */
@@ -2039,17 +2106,65 @@ Ministério Público, com apoio da Polícia Militar.
   registrou: \`documento\`, \`placa\`, \`faixa\`, \`interior\`, \`irregularidade\`
   ou \`outra\`.
 
-## Tarefas usuais
+## Tarefa principal — extrair os dados dos documentos
 
-1. **Extrair dados dos documentos**: nas fotos marcadas como \`documento\`, ler
-   CNH (número, categoria, validade, nome e CPF do condutor), CRLV (placa,
-   RENAVAM, marca/modelo, ano, categoria) e a autorização para transporte
-   escolar. Devolver em JSON, indicando o arquivo de origem de cada campo.
-2. **Conferir contra o coletado**: comparar o que foi lido com os campos de
-   \`dados.json\` e apontar divergências, em vez de sobrescrever.
-3. **Não inventar**: campo ilegível deve voltar como \`null\`, com a observação
-   de que a foto não permite a leitura. Trata-se de instrução de documento
-   oficial — dado presumido compromete o relatório.
+Em campo o agente fotografa e quase não digita. Cabe a você ler as fotos
+marcadas como \`documento\` e devolver os campos abaixo, por veículo:
+
+| Campo | Onde costuma estar |
+| --- | --- |
+| \`condutorNome\`, \`condutorCpf\` | CNH |
+| \`condutorCnh\` (número de registro), \`condutorCategoria\`, \`condutorValidadeCnh\` | CNH |
+| \`marcaModelo\`, \`ano\`, \`cor\`, \`renavam\`, \`lotacao\` | CRLV |
+| \`permissionario\` | CRLV (proprietário) ou autorização |
+| \`escolaRota\`, \`monitorNome\`, \`condutorTelefone\` | autorização/contrato, quando constar |
+
+### Formato da resposta
+
+Devolva **um arquivo .json** exatamente nesta forma — o aplicativo o importa de
+volta em *Relatório → Importar extração da IA*, casando os veículos pela placa:
+
+\`\`\`json
+{
+  "formato": "fiscalizacao-transporte-escolar/extracao/1",
+  "veiculos": [
+    {
+      "placa": "ABC-1D23",
+      "campos": {
+        "condutorNome": "…",
+        "condutorCpf": "…",
+        "condutorCnh": "…",
+        "condutorCategoria": "D",
+        "condutorValidadeCnh": "2027-05-10",
+        "marcaModelo": "…",
+        "ano": "2014",
+        "cor": "…",
+        "renavam": "…",
+        "lotacao": "20",
+        "permissionario": "…",
+        "fontes": { "condutorNome": "fotos/veiculo-01_abc1d23_documento_1.jpg" }
+      },
+      "naoLegivel": ["condutorCpf"],
+      "observacoes": "CPF encoberto pelo reflexo do plástico."
+    }
+  ]
+}
+\`\`\`
+
+Datas em \`AAAA-MM-DD\`. Números (CPF, CNH, RENAVAM) apenas com dígitos.
+
+### Regras
+
+1. **Não inventar.** Campo ilegível não entra em \`campos\`: entra em
+   \`naoLegivel\`, com a explicação em \`observacoes\`. É documento oficial — dado
+   presumido compromete o relatório e pode induzir a uma imputação indevida.
+2. **Não corrigir o que o agente registrou.** Se a leitura divergir do que já
+   consta em \`dados.json\`, mantenha o valor lido em \`campos\` e **aponte a
+   divergência em \`observacoes\`**; a decisão é do promotor.
+3. **A placa manda.** Use a placa do \`dados.json\` para identificar o veículo,
+   não a lida na foto — é ela que casa os registros na volta.
+4. **Irregularidades não se extraem de foto.** A constatação é do agente em
+   campo; não acrescente nem remova itens do checklist.
 
 ## Cuidado
 
@@ -2150,6 +2265,7 @@ async function gerarPacoteIA(fisc, veiculos, { comFotos = true } = {}) {
         veiculos: r.qtd,
       })),
     },
+    camposAExtrairDasFotos: CAMPOS_EXTRAIVEIS,
     catalogoDeItens: ITENS.map((i) => ({
       id: i.id,
       titulo: i.titulo,
@@ -2952,7 +3068,7 @@ async function pendencias(fisc) {
 
 // namespaces equivalentes aos "import * as"
 const fotosApi = { comprimir, TIPOS_FOTO, salvarFotos, fotosDoVeiculo, fotosDaFiscalizacao, excluirFoto, atualizarFoto, blobParaDataURL, dataURLParaBlob };
-const store = { novaFiscalizacao, salvarFiscalizacao, listarFiscalizacoes, obterFiscalizacao, excluirFiscalizacao, idFiscalizacaoAtual, definirFiscalizacaoAtual, inspetorAtual, definirInspetor, novoVeiculo, salvarVeiculo, obterVeiculo, listarVeiculos, excluirVeiculo, proximaOrdem, renumerar, normalizarPlaca, placaValida, formatarPlaca, irregularidades, contarIrregularidades, itensVerificados, frasesIrregularidades, consolidar, mesclarVeiculos };
+const store = { novaFiscalizacao, salvarFiscalizacao, listarFiscalizacoes, obterFiscalizacao, excluirFiscalizacao, idFiscalizacaoAtual, definirFiscalizacaoAtual, inspetorAtual, definirInspetor, novoVeiculo, salvarVeiculo, obterVeiculo, listarVeiculos, excluirVeiculo, proximaOrdem, renumerar, normalizarPlaca, placaValida, formatarPlaca, irregularidades, contarIrregularidades, itensVerificados, frasesIrregularidades, consolidar, CAMPOS_EXTRAIVEIS, aplicarExtracao, importarExtracao, mesclarVeiculos };
 const backup = { exportar, importar, baixarArquivo, compartilharOuBaixar };
 const nuvem = { configNuvem, definirConfigNuvem, nuvemConfigurada, codigoPadrao, aplicarConfigDaURL, linkConfiguracao, servidorEmUso, chaveVeiculo, criarSala, entrarSala, sairSala, marcarRemocao, estaSincronizando, sincronizar, painel, pendencias };
 
@@ -3321,19 +3437,22 @@ async function viewVeiculo(id) {
       </label>
       <div class="grade-2">
         ${select('Tipo', 'v_tipo', v.tipo, TIPOS_VEICULO)}
-        ${campo('Marca/modelo', 'v_marcaModelo', v.marcaModelo, { placeholder: 'Ex.: Mercedes Sprinter' })}
-        ${campo('Ano', 'v_ano', v.ano, { inputmode: 'numeric', maxlength: 4 })}
-        ${campo('Cor', 'v_cor', v.cor)}
-        ${campo('Lotação', 'v_lotacao', v.lotacao, { inputmode: 'numeric' })}
-        ${campo('Escolares a bordo', 'v_alunosBordo', v.alunosBordo, { inputmode: 'numeric' })}
+        ${campo('Escolares a bordo', 'v_alunosBordo', v.alunosBordo, { inputmode: 'numeric', ajuda: 'Contagem no momento da abordagem' })}
       </div>
-      ${campo('Permissionário / empresa', 'v_permissionario', v.permissionario)}
-      ${campo('Rota / escola atendida', 'v_escolaRota', v.escolaRota)}
+      <label class="campo linha-check">
+        <input type="checkbox" id="v_monitorPossui" ${v.monitorPossui ? 'checked' : ''}>
+        <span>Monitor/acompanhante presente</span>
+      </label>
     </section>
 
     <section class="cartao">
       <h3>Registro fotográfico</h3>
-      <p class="ajuda">Registre, no mínimo: a placa, a lateral com a faixa ESCOLAR, o interior (cintos) e cada irregularidade constatada.</p>
+      <p class="ajuda">
+        <b>📄 Documento:</b> CNH (frente), CRLV e autorização para transporte escolar —
+        é daí que os dados do condutor e do veículo serão extraídos.<br>
+        <b>📷 Veículo:</b> a placa, a lateral com a faixa ESCOLAR, o interior (cintos)
+        e cada irregularidade constatada.
+      </p>
       <div class="acoes">
         <label class="btn primario arquivo">📄 Documento
           <input type="file" accept="image/*" capture="environment" multiple hidden id="cam-doc">
@@ -3352,20 +3471,45 @@ async function viewVeiculo(id) {
     </section>
 
     <section class="cartao">
-      <h3>Condutor</h3>
-      ${campo('Nome', 'v_condutorNome', v.condutorNome)}
-      <div class="grade-2">
-        ${campo('CPF', 'v_condutorCpf', v.condutorCpf, { inputmode: 'numeric' })}
-        ${campo('Telefone', 'v_condutorTelefone', v.condutorTelefone, { inputmode: 'tel' })}
-        ${campo('Nº da CNH', 'v_condutorCnh', v.condutorCnh, { inputmode: 'numeric' })}
-        ${campo('Categoria', 'v_condutorCategoria', v.condutorCategoria, { placeholder: 'D, E…' })}
-        ${campo('Validade da CNH', 'v_condutorValidadeCnh', v.condutorValidadeCnh, { tipo: 'date' })}
-      </div>
-      <label class="campo linha-check">
-        <input type="checkbox" id="v_monitorPossui" ${v.monitorPossui ? 'checked' : ''}>
-        <span>Monitor/acompanhante presente</span>
-      </label>
-      ${campo('Nome do monitor', 'v_monitorNome', v.monitorNome)}
+      <details class="grupo" ${temDadosDigitados(v) ? 'open' : ''}>
+        <summary>
+          <span>📝 Dados do condutor e do veículo</span>
+          <span class="selos">${
+            v.extraidoIA
+              ? '<span class="selo aviso">preenchido pela IA</span>'
+              : '<span class="selo">a IA preenche</span>'
+          }</span>
+        </summary>
+        <div class="bloco-detalhe">
+          <p class="ajuda">
+            Não é preciso digitar em campo: fotografe a CNH, o CRLV e a autorização
+            com o botão <b>📄 Documento</b>. Depois, o pacote para IA devolve estes
+            campos preenchidos. Digite apenas o que a foto não resolver.
+          </p>
+          ${
+            v.extraidoIA
+              ? `<div class="alerta-box">Preenchido pela IA em ${esc(new Date(v.extraidoIA.em).toLocaleString('pt-BR'))}
+                 (${v.extraidoIA.campos.length} campo(s)). <b>Confira antes de assinar o relatório.</b></div>`
+              : ''
+          }
+          ${campo('Condutor — nome', 'v_condutorNome', v.condutorNome)}
+          <div class="grade-2">
+            ${campo('CPF', 'v_condutorCpf', v.condutorCpf, { inputmode: 'numeric' })}
+            ${campo('Telefone', 'v_condutorTelefone', v.condutorTelefone, { inputmode: 'tel' })}
+            ${campo('Nº da CNH', 'v_condutorCnh', v.condutorCnh, { inputmode: 'numeric' })}
+            ${campo('Categoria', 'v_condutorCategoria', v.condutorCategoria, { placeholder: 'D, E…' })}
+            ${campo('Validade da CNH', 'v_condutorValidadeCnh', v.condutorValidadeCnh, { tipo: 'date' })}
+            ${campo('Nome do monitor', 'v_monitorNome', v.monitorNome)}
+            ${campo('Marca/modelo', 'v_marcaModelo', v.marcaModelo, { placeholder: 'Ex.: Mercedes Sprinter' })}
+            ${campo('Ano', 'v_ano', v.ano, { inputmode: 'numeric', maxlength: 4 })}
+            ${campo('Cor', 'v_cor', v.cor)}
+            ${campo('RENAVAM', 'v_renavam', v.renavam, { inputmode: 'numeric' })}
+            ${campo('Lotação', 'v_lotacao', v.lotacao, { inputmode: 'numeric' })}
+          </div>
+          ${campo('Permissionário / empresa', 'v_permissionario', v.permissionario)}
+          ${campo('Rota / escola atendida', 'v_escolaRota', v.escolaRota)}
+        </div>
+      </details>
     </section>
 
     <section class="cartao" id="secao-checklist">
@@ -3563,6 +3707,15 @@ function itemChecklistHTML(item, v) {
     </div>`;
 }
 
+/** Há algo preenchido nos campos que a IA costuma extrair? */
+function temDadosDigitados(v) {
+  return !!(
+    v.condutorNome || v.condutorCpf || v.condutorCnh || v.condutorCategoria ||
+    v.marcaModelo || v.ano || v.cor || v.renavam || v.lotacao ||
+    v.permissionario || v.escolaRota || v.monitorNome || v.extraidoIA
+  );
+}
+
 function fotoHTML(f) {
   return `
     <figure class="foto" data-foto="${f.id}">
@@ -3593,6 +3746,7 @@ function ligarFichaVeiculo(v) {
     });
   };
   texto('v_marcaModelo', 'marcaModelo');
+  texto('v_renavam', 'renavam');
   texto('v_ano', 'ano');
   texto('v_cor', 'cor');
   texto('v_lotacao', 'lotacao');
@@ -3665,7 +3819,7 @@ function ligarFichaVeiculo(v) {
   if (modoChecklist() === 'rapido') ligarChecklistRapido(v, salvar);
 
   // checklist — modo completo
-  app.querySelectorAll('.item-check').forEach((div) => {
+  app.querySelectorAll('.item-check[data-item]').forEach((div) => {
     const itemId = div.dataset.item;
     div.querySelectorAll('.op').forEach((btn) => {
       btn.onclick = () => {
@@ -3853,6 +4007,9 @@ async function viewRelatorio() {
         <button class="btn" id="doc">📝 Baixar .doc (Word)</button>
         <button class="btn" id="csv">📊 Baixar planilha (CSV)</button>
         <button class="btn" id="pacote">🤖 Pacote para IA (.zip)</button>
+        <label class="btn arquivo">📥 Importar extração da IA
+          <input type="file" accept="application/json,.json" hidden id="extracao">
+        </label>
       </div>
     </section>
     <section class="cartao previa">
@@ -3899,6 +4056,42 @@ async function viewRelatorio() {
     const r = await gerarPacoteIA(fisc, veiculos, { comFotos: comFotos() });
     await backup.compartilharOuBaixar(r.blob, r.nome, 'application/zip');
     toast(`Pacote com ${r.fotos} foto(s) e os dados estruturados.`);
+  };
+
+  document.getElementById('extracao').onchange = async (e) => {
+    const arquivo = e.target.files[0];
+    e.target.value = '';
+    if (!arquivo) return;
+    const alvo = document.getElementById('previa');
+    try {
+      const pacote = JSON.parse(await arquivo.text());
+      const sobrescrever = confirm(
+        'Sobrescrever os campos que já estão preenchidos?\n\n' +
+          'OK = a leitura da IA prevalece.\n' +
+          'Cancelar = preenche apenas os campos vazios (recomendado).'
+      );
+      const r = await store.importarExtracao(fisc.id, pacote, { sobrescrever });
+      const veiculosAtualizados = await store.listarVeiculos(fisc.id);
+      veiculos.length = 0;
+      veiculos.push(...veiculosAtualizados);
+      alvo.innerHTML = `
+        <div class="ok-box">
+          <b>${r.atualizados.length} veículo(s) preenchido(s) pela extração.</b>
+          ${r.semNovidade.length ? `<br>${r.semNovidade.length} sem campos novos.` : ''}
+          ${
+            r.semCorrespondencia.length
+              ? `<br><b>Sem correspondência de placa:</b> ${esc(r.semCorrespondencia.join(', '))}.`
+              : ''
+          }
+          <ul>${r.atualizados
+            .map((a) => `<li>${esc(a.placa)}: ${esc(a.campos.join(', '))}</li>`)
+            .join('')}</ul>
+          Confira os dados na ficha de cada veículo antes de assinar o relatório.
+        </div>`;
+      toast('Extração importada.');
+    } catch (err) {
+      alvo.innerHTML = `<div class="alerta-box">${esc(err.message)}</div>`;
+    }
   };
 
   document.getElementById('csv').onclick = async () => {
@@ -4018,7 +4211,7 @@ async function renderNuvem() {
         </p>
         <details class="grupo">
           <summary><span>⚙️ Como obter esses dados</span></summary>
-          <div class="item-check">
+          <div class="bloco-detalhe">
             <ol class="passos">
               <li>Crie um projeto gratuito em <b>supabase.com</b>.</li>
               <li>Em <i>SQL Editor → New query</i>, cole o conteúdo de <b>supabase/schema.sql</b> e execute.</li>

@@ -10,9 +10,11 @@ relatório com todas as irregularidades apontadas — no mesmo padrão do
 
 - **Cadastro da fiscalização**: nº do relatório, data, horário, município, local,
   promotoria, promotor(a), órgão de apoio e equipe.
-- **Ficha por veículo**: placa (com validação e alerta de placa repetida), tipo,
-  marca/modelo, lotação, escolares a bordo, permissionário, rota/escola,
-  dados do condutor e do monitor.
+- **Ficha enxuta por veículo**: em campo digita-se apenas o que não se fotografa —
+  placa (com validação e alerta de placa repetida), tipo, escolares a bordo e a
+  presença de monitor. Condutor, CNH, CRLV, marca/modelo, RENAVAM, lotação e
+  permissionário ficam recolhidos e são preenchidos depois, pela leitura das
+  fotos dos documentos.
 - **Registro fotográfico classificado**: o botão usado já define o tipo da foto
   (**documento** ou **veículo**), corrigível em cada imagem. As fotos são
   comprimidas no aparelho e ganham legenda opcional.
@@ -29,10 +31,13 @@ relatório com todas as irregularidades apontadas — no mesmo padrão do
   observações montado automaticamente), conclusão/providências e anexo
   fotográfico. Exportação em **PDF (impressão)**, **.doc (Word, editável)** e
   **CSV (planilha)**.
-- **Pacote para IA (.zip)**: as fotos nomeadas por veículo, placa e tipo, mais
-  `dados.json` (dados estruturados, com a base legal de cada irregularidade),
-  `resumo.md` e um arquivo de instruções. É o formato para entregar a um
-  assistente que vá extrair os dados dos documentos fotografados.
+- **Ciclo foto → IA → relatório**: o botão *Pacote para IA (.zip)* leva as fotos
+  nomeadas por veículo, placa e tipo, mais `dados.json` (dados estruturados, com a
+  base legal de cada irregularidade), `resumo.md` e as instruções — inclusive o
+  formato exato da resposta. O assistente devolve um `.json` e *Importar extração
+  da IA* preenche as fichas, casando os veículos pela placa. Por padrão só
+  completa campos vazios: o que o agente digitou prevalece. Cada ficha preenchida
+  assim exibe a procedência e a data, para conferência antes da assinatura.
 - **Sincronização da equipe (opcional)**: todos os agentes trabalham na mesma
   operação; cada aparelho grava offline e envia sozinho quando há sinal, e o
   coordenador acompanha ao vivo quantos veículos cada agente já fiscalizou.
