@@ -59,20 +59,23 @@ para incluir exigências específicas da Prefeitura. Cada item tem:
 > (infrações) devem ter o inciso confirmado antes do encaminhamento oficial —
 > basta editar o campo `base` do item correspondente.
 
-## Como colocar no ar para a equipe
+## Endereço do aplicativo
 
-O aplicativo é estático (HTML/CSS/JS puros, sem servidor e sem banco externo).
+O aplicativo já está publicado:
 
-**Opção 1 — GitHub Pages (recomendada, sem custo).** Passo a passo com os cliques
-exatos em [`COMO_COLOCAR_NO_AR.md`](COMO_COLOCAR_NO_AR.md). Em resumo:
-*Settings → Pages → Source: **Deploy from a branch***, escolha a branch deste
-código e a pasta `/ (root)`. Em poucos minutos o aplicativo fica disponível em
-`https://<usuário>.github.io/<repositório>/fiscalizacao-transporte-escolar/`.
+**https://ruicesarjunior-ship-it.github.io/ruicesar/fiscalizacao/**
 
-**Opção 2 — qualquer hospedagem estática** (Netlify, Vercel, servidor da
-Promotoria): basta publicar o conteúdo desta pasta.
+A publicação é automática a cada push neste branch, pelo workflow
+`.github/workflows/publicar-fiscalizacao.yml`. O site do GitHub Pages é único por
+repositório e hospeda também o app de expedição de ofícios (na raiz), por isso os
+dois workflows montam o site inteiro — publicar um não derruba o outro.
 
-**Opção 3 — teste local**:
+O aplicativo é estático (HTML/CSS/JS puros, sem servidor e sem banco externo),
+então também roda em **qualquer hospedagem estática** (Netlify, Vercel, servidor
+da Promotoria): basta publicar o conteúdo desta pasta, ou o arquivo único gerado
+por `node scripts/gerar-arquivo-unico.mjs`.
+
+**Teste local**:
 
 ```bash
 cd fiscalizacao-transporte-escolar

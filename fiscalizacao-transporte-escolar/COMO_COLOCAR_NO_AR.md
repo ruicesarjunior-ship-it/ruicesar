@@ -4,34 +4,34 @@
 > veja [`CONFIGURACAO_AUTOMATICA.md`](CONFIGURACAO_AUTOMATICA.md). Este documento
 > é o caminho manual, útil se algo falhar.
 
-Duas etapas exigem o seu login e por isso não podem ser feitas por mim:
-**publicar o endereço** (GitHub) e **criar o banco** (Supabase). Cada uma leva
-poucos minutos e é feita **uma única vez**. Todo o resto já está pronto.
+## Etapa A — publicar o endereço ✅ CONCLUÍDA
 
-Se preferir, faça só a **Etapa A** e use o aplicativo hoje mesmo, sem
-sincronização (a consolidação sai por arquivo, na aba *Equipe*).
+O aplicativo já está no ar:
+
+```
+https://ruicesarjunior-ship-it.github.io/ruicesar/fiscalizacao/
+```
+
+Abra no celular e use *Adicionar à tela inicial* para instalar. Não é preciso
+mexer em configuração do GitHub: a publicação é automática a cada push no branch
+`claude/school-transport-inspection-app-rj223v`, pelo workflow
+`.github/workflows/publicar-fiscalizacao.yml`.
+
+O site do Pages é único por repositório e hospeda os dois aplicativos:
+
+| Endereço | Aplicativo |
+| --- | --- |
+| `/ruicesar/` | Expedição de ofícios |
+| `/ruicesar/fiscalizacao/` | Fiscalização do transporte escolar |
+| `/ruicesar/fiscalizacao/arquivo-unico.html` | Mesma fiscalização, em arquivo único |
+
+Os dois workflows montam o site completo, então publicar um não derruba o outro.
 
 ---
 
-## Etapa A — publicar o endereço (≈ 2 minutos)
-
-1. Abra: `https://github.com/ruicesarjunior-ship-it/ruicesar/settings/pages`
-2. Em **Source**, escolha **Deploy from a branch**.
-3. Em **Branch**, escolha `claude/school-transport-inspection-app-rj223v`
-   e a pasta **`/ (root)`**. Clique em **Save**.
-4. Aguarde 1 a 2 minutos e abra:
-
-   ```
-   https://ruicesarjunior-ship-it.github.io/ruicesar/fiscalizacao-transporte-escolar/
-   ```
-
-Esse é o endereço do aplicativo. Já pode ser usado no celular e instalado na
-tela inicial (menu do navegador → *Adicionar à tela inicial*).
-
-> Se o repositório for privado, o GitHub Pages exige plano pago. Nesse caso,
-> torne o repositório público (o aplicativo não contém dados de fiscalização —
-> os dados ficam no celular e, se houver sincronização, no seu banco) ou publique
-> a pasta em outra hospedagem estática, como Netlify ou Vercel.
+Resta **uma** etapa, que exige o seu login e por isso não pode ser feita por mim:
+**criar o banco** (Supabase), necessário apenas para a sincronização ao vivo.
+Sem ela o aplicativo funciona por completo, com consolidação por arquivo.
 
 ---
 
