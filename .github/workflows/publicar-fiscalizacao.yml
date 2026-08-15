@@ -1,0 +1,81 @@
+name: Publicar site (ofícios + fiscalização)
+
+# O GitHub Pages serve um único site por repositório, e ele já hospeda o app de
+# expedição de ofícios. Este workflow monta os dois num site só:
+#
+#   /ruicesar/                → app de expedição de ofícios (web/dist)
+#   /ruicesar/fiscalizacao/   → app de fiscalização do transporte escolar
+#
+# Se o app de ofícios não compilar, o workflow falha antes de publicar e o site
+# no ar permanece intacto — nunca se publica um site pela metade.
+
+on:
+  push:
+    branches:
+      - claude/school-transport-inspection-app-rj223v
+    paths:
+      - "fiscalizacao-transporte-escolar/**"
+      - ".github/workflows/publicar-fiscalizacao.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar este branch (app de fiscalização)
+        uses: actions/checkout@v4
+
+      - name: Baixar o branch do app de expedição de ofícios
+        uses: actions/checkout@v4
+        with:
+          ref: claude/mpba-expedicao-oficios-bjn9cb
+          path: oficios
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Compilar o app de expedição de ofícios
+        working-directory: oficios/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Montar o site
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site/fiscalizacao
+          cp -r oficios/web/dist/. _site/
+          cd fiscalizacao-transporte-escolar
+          cp -r index.html manifest.webmanifest sw.js css js icons ../_site/fiscalizacao/
+          cp dist/fiscalizacao-transporte-escolar.html ../_site/fiscalizacao/arquivo-unico.html
+          cd ..
+          echo "Conteúdo publicado:"
+          find _site -maxdepth 2 -mindepth 1 | sort
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar no Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
