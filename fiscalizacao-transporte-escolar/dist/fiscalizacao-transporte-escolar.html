@@ -1,0 +1,3434 @@
+<title>Fiscalização Escolar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f4c3a">
+<style>
+/* Fiscalização do Transporte Escolar — interface mobile-first */
+
+:root {
+  --verde: #0f4c3a;
+  --verde-claro: #16694f;
+  --amarelo: #f2b705;
+  --vermelho: #b3261e;
+  --vermelho-claro: #fdecea;
+  --verde-ok: #1b7a3e;
+  --verde-ok-claro: #e8f6ec;
+  --amarelo-claro: #fff6dd;
+  --fundo: #f4f6f5;
+  --cartao: #ffffff;
+  --texto: #16211d;
+  --texto-fraco: #5d6b66;
+  --borda: #d9e0dc;
+  --raio: 14px;
+  --sombra: 0 1px 3px rgba(0, 0, 0, .09);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ------------------------------------------------------------------- topo */
+
+.topo {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--verde);
+  color: #fff;
+  padding: 10px 14px calc(10px + env(safe-area-inset-top, 0px));
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  box-shadow: var(--sombra);
+}
+.topo-linha { display: flex; align-items: center; gap: 10px; }
+.topo-texto { flex: 1; min-width: 0; }
+.status-nuvem {
+  background: rgba(255, 255, 255, .16);
+  border: none;
+  color: #fff;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: .8rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 34px;
+}
+.status-nuvem.erro { background: rgba(255, 190, 180, .3); }
+.status-nuvem.pendente { background: rgba(242, 183, 5, .35); }
+.passos { margin: 0; padding-left: 20px; font-size: .84rem; line-height: 1.5; }
+.passos li { margin-bottom: 4px; }
+.topo h1 { font-size: 1rem; margin: 0; font-weight: 700; line-height: 1.2; }
+.topo .logo { font-size: 1.6rem; }
+.contexto { font-size: .78rem; opacity: .9; margin-top: 2px; }
+
+.conteudo {
+  padding: 12px 12px 96px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+/* ---------------------------------------------------------------- cartões */
+
+.cartao {
+  background: var(--cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--sombra);
+}
+.cartao.destaque { border-left: 5px solid var(--verde); }
+.cartao h2 { font-size: 1.1rem; margin: 0 0 8px; }
+.cartao h3 { font-size: .98rem; margin: 0 0 8px; }
+.cartao-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.etiqueta {
+  display: inline-block;
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  background: var(--verde-ok-claro);
+  color: var(--verde);
+  padding: 3px 8px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+.sub { color: var(--texto-fraco); font-size: .86rem; margin: 2px 0 10px; }
+.ajuda { color: var(--texto-fraco); font-size: .8rem; margin: 4px 0 8px; }
+.vazio { color: var(--texto-fraco); font-style: italic; padding: 8px 0; }
+.rodape-info { text-align: center; color: var(--texto-fraco); font-size: .75rem; }
+
+.painel-numeros {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+.painel-numeros div {
+  background: var(--fundo);
+  border-radius: 10px;
+  padding: 8px 4px;
+  text-align: center;
+}
+.painel-numeros b { display: block; font-size: 1.35rem; line-height: 1.1; }
+.painel-numeros span { font-size: .68rem; color: var(--texto-fraco); }
+.painel-numeros .alerta b { color: var(--vermelho); }
+
+.ranking-lista { margin: 0; padding-left: 20px; }
+.ranking-lista li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: .88rem; }
+.ranking-lista b { color: var(--vermelho); }
+
+/* ---------------------------------------------------------------- botões */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--borda);
+  background: #fff;
+  color: var(--texto);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: .9rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn:active { transform: scale(.985); }
+.btn.primario { background: var(--verde); border-color: var(--verde); color: #fff; }
+.btn.grande { flex: 1 1 46%; min-height: 52px; font-size: .95rem; }
+.btn.pequeno { padding: 7px 10px; min-height: 36px; font-size: .82rem; }
+.btn.icone { padding: 8px 10px; min-height: 40px; }
+.btn.perigo { color: var(--vermelho); border-color: #e8c9c6; background: var(--vermelho-claro); }
+.btn.arquivo { position: relative; overflow: hidden; }
+.acoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+
+/* ---------------------------------------------------------------- campos */
+
+.campo { display: block; margin-bottom: 10px; }
+.campo > span { display: block; font-size: .8rem; font-weight: 600; color: var(--texto-fraco); margin-bottom: 4px; }
+.campo input[type="text"],
+.campo input[type="date"],
+.campo input[type="time"],
+.campo input[type="tel"],
+.campo input[type="number"],
+.campo select,
+.campo textarea,
+.busca {
+  width: 100%;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: #fff;
+  color: var(--texto);
+  min-height: 44px;
+}
+.campo textarea { resize: vertical; }
+.campo small { display: block; font-size: .74rem; color: var(--texto-fraco); margin-top: 3px; }
+.campo.linha-check { display: flex; align-items: center; gap: 10px; }
+.campo.linha-check input { width: 22px; height: 22px; }
+.campo.linha-check span { margin: 0; font-size: .92rem; color: var(--texto); font-weight: 500; }
+.grade-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+@media (max-width: 400px) { .grade-2 { grid-template-columns: 1fr; } }
+
+.placa-campo input {
+  font-size: 1.5rem;
+  letter-spacing: 3px;
+  text-align: center;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.aviso-txt { font-size: .78rem; }
+.aviso-txt.erro { color: var(--vermelho); font-weight: 600; }
+.aviso-txt.ok { color: var(--verde-ok); }
+
+.busca { margin-bottom: 10px; }
+
+/* ----------------------------------------------------------------- listas */
+
+.lista { list-style: none; margin: 0; padding: 0; }
+.item-lista {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--borda);
+  padding: 4px 0;
+}
+.item-lista:last-child { border-bottom: none; }
+.item-lista.ativo { background: var(--verde-ok-claro); border-radius: 8px; }
+.link-item {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px 4px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  min-height: 44px;
+}
+.link-item b { display: block; font-size: .95rem; }
+.link-item small { display: block; color: var(--texto-fraco); font-size: .76rem; margin-top: 2px; }
+
+.selos { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.selo {
+  font-size: .7rem;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--fundo);
+  color: var(--texto-fraco);
+  white-space: nowrap;
+}
+.selo.perigo { background: var(--vermelho-claro); color: var(--vermelho); }
+.selo.ok { background: var(--verde-ok-claro); color: var(--verde-ok); }
+.selo.aviso { background: var(--amarelo-claro); color: #8a6a00; }
+
+/* -------------------------------------------------------------- checklist */
+
+.grupo {
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.grupo > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--fundo);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: .9rem;
+  list-style: none;
+  min-height: 48px;
+}
+.grupo > summary::-webkit-details-marker { display: none; }
+
+.item-check { padding: 10px 12px; border-top: 1px solid var(--borda); }
+.item-check-titulo b { display: block; font-size: .9rem; line-height: 1.3; }
+.item-check-titulo small { display: block; color: var(--texto-fraco); font-size: .72rem; margin-top: 2px; }
+.opcoes { display: flex; gap: 6px; margin-top: 8px; }
+.op {
+  flex: 1;
+  border: 1px solid var(--borda);
+  background: #fff;
+  border-radius: 9px;
+  padding: 10px 4px;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 44px;
+  color: var(--texto-fraco);
+}
+.op.sel.ok { background: var(--verde-ok); border-color: var(--verde-ok); color: #fff; }
+.op.sel.perigo { background: var(--vermelho); border-color: var(--vermelho); color: #fff; }
+.op.sel:not(.ok):not(.perigo) { background: var(--texto-fraco); border-color: var(--texto-fraco); color: #fff; }
+.obs-item {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--borda);
+  border-radius: 9px;
+  padding: 10px;
+  font-size: .88rem;
+  font-family: inherit;
+}
+.obs-item.oculto { display: none; }
+
+.resumo-irr {
+  background: var(--fundo);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: .84rem;
+  margin: 10px 0;
+  line-height: 1.4;
+}
+.resumo-irr.com-irr { background: var(--vermelho-claro); }
+
+.alerta-box {
+  background: var(--amarelo-claro);
+  border-left: 4px solid var(--amarelo);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: .85rem;
+  margin: 8px 0;
+}
+.alerta-box ul { margin: 6px 0 0; padding-left: 18px; }
+.ok-box {
+  background: var(--verde-ok-claro);
+  border-left: 4px solid var(--verde-ok);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: .85rem;
+  margin: 8px 0;
+}
+
+/* ------------------------------------------------------------------ fotos */
+
+.grade-fotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.foto { margin: 0; position: relative; }
+.foto img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  cursor: zoom-in;
+}
+.foto .legenda {
+  width: 100%;
+  margin-top: 4px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: .78rem;
+  font-family: inherit;
+}
+.foto .apagar { position: absolute; top: 6px; right: 6px; opacity: .92; }
+
+.visualizador {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .9);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 16px;
+}
+.visualizador img { max-width: 100%; max-height: 82vh; object-fit: contain; }
+
+/* ------------------------------------------------------------- navegação */
+
+.navegacao {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: #fff;
+  border-top: 1px solid var(--borda);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 30;
+}
+.nav-item {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 8px 2px;
+  font-size: .68rem;
+  color: var(--texto-fraco);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  min-height: 56px;
+  font-family: inherit;
+}
+.nav-item span { font-size: 1.25rem; }
+.nav-item.ativo { color: var(--verde); font-weight: 700; }
+
+/* ------------------------------------------------------------------ toast */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 78px;
+  transform: translate(-50%, 16px);
+  background: #21302b;
+  color: #fff;
+  padding: 11px 16px;
+  border-radius: 999px;
+  font-size: .84rem;
+  opacity: 0;
+  transition: opacity .25s, transform .25s;
+  z-index: 200;
+  max-width: 92vw;
+  text-align: center;
+}
+.toast.visivel { opacity: 1; transform: translate(-50%, 0); }
+.toast--aviso { background: #7a4a00; }
+
+/* ----------------------------------------------------- prévia do relatório */
+
+.previa .documento {
+  background: #fff;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+}
+.previa .documento table { font-size: .8rem; }
+
+/* -------------------------------------------------------------- impressão */
+
+#area-impressao { display: none; }
+
+@media print {
+  .topo, .navegacao, .conteudo, .toast { display: none !important; }
+  #area-impressao { display: block !important; }
+  html, body { background: #fff; }
+}
+
+</style>
+
+<header class="topo">
+    <div class="topo-linha">
+      <span class="logo">🚌</span>
+      <div class="topo-texto">
+        <h1>Fiscalização do Transporte Escolar</h1>
+        <div id="barra-contexto" class="contexto">carregando…</div>
+      </div>
+      <button id="status-nuvem" class="status-nuvem" title="Sincronização da equipe" hidden></button>
+    </div>
+  </header>
+
+  <main id="app" class="conteudo"></main>
+
+  <nav class="navegacao" aria-label="Navegação principal">
+    <button class="nav-item" data-rota="#/"><span>🏠</span>Início</button>
+    <button class="nav-item" data-rota="#/dados-fisc"><span>📋</span>Dados</button>
+    <button class="nav-item" data-rota="#/veiculos"><span>🚐</span>Veículos</button>
+    <button class="nav-item" data-rota="#/relatorio"><span>📄</span>Relatório</button>
+    <button class="nav-item" data-rota="#/equipe"><span>👥</span>Equipe</button>
+  </nav>
+
+  <!-- Container usado apenas na impressão / geração do PDF -->
+  <div id="area-impressao" aria-hidden="true"></div>
+
+  <script type="module" src="./js/app.js"></script>
+
+<script>
+/* Aplicativo de Fiscalização do Transporte Escolar — arquivo único gerado por
+   scripts/gerar-arquivo-unico.mjs a partir dos fontes em js/ e css/. */
+(function () {
+'use strict';
+
+// ===================== js/config.js =====================
+
+/**
+ * Configuração do servidor de sincronização.
+ *
+ * Preencha os dois valores abaixo UMA VEZ, no lugar onde o aplicativo está
+ * publicado. Feito isso, todo celular que abrir o endereço já vem configurado:
+ * a equipe só precisa do código e da senha da operação.
+ *
+ * Onde encontrar (projeto Supabase → Project Settings → API):
+ *   SUPABASE_URL       = "Project URL"        (ex.: https://abcdefgh.supabase.co)
+ *   SUPABASE_ANON_KEY  = chave "anon public"  (começa com eyJ...)
+ *
+ * A chave "anon public" é pública por natureza — pode ficar no código e no link
+ * enviado à equipe. Ela sozinha não dá acesso a nada: as tabelas estão fechadas
+ * e todo acesso exige o código e a senha da operação.
+ *
+ * NUNCA coloque aqui a chave "service_role".
+ *
+ * Deixando em branco, o aplicativo funciona normalmente sem sincronização, e o
+ * servidor pode ser configurado à mão na aba "Equipe" de cada aparelho.
+ */
+
+const CONFIG = {
+  SUPABASE_URL: '',
+  SUPABASE_ANON_KEY: '',
+
+  // Opcional: código sugerido da operação (a senha nunca fica no código).
+  CODIGO_OPERACAO_PADRAO: '',
+};
+
+
+// ===================== js/db.js =====================
+
+/**
+ * Camada de persistência local (IndexedDB).
+ *
+ * Todos os dados ficam no próprio aparelho — nada é enviado para servidores.
+ * Object stores:
+ *   fiscalizacoes: { id, numero, ano, data, hora, municipio, ... }
+ *   veiculos:      { id, fiscalizacaoId, ordem, placa, itens, ... }
+ *   fotos:         { id, veiculoId, fiscalizacaoId, blob, legenda, criadoEm }
+ */
+
+const DB_NAME = 'fte-db';
+const DB_VERSION = 1;
+
+let _db = null;
+
+function openDB() {
+  if (_db) return Promise.resolve(_db);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('fiscalizacoes')) {
+        db.createObjectStore('fiscalizacoes', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('veiculos')) {
+        const s = db.createObjectStore('veiculos', { keyPath: 'id' });
+        s.createIndex('fiscalizacaoId', 'fiscalizacaoId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('fotos')) {
+        const s = db.createObjectStore('fotos', { keyPath: 'id' });
+        s.createIndex('veiculoId', 'veiculoId', { unique: false });
+        s.createIndex('fiscalizacaoId', 'fiscalizacaoId', { unique: false });
+      }
+    };
+    req.onsuccess = () => {
+      _db = req.result;
+      resolve(_db);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function tx(store, mode) {
+  return openDB().then((db) => db.transaction(store, mode).objectStore(store));
+}
+
+function wrap(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function put(store, obj) {
+  const s = await tx(store, 'readwrite');
+  await wrap(s.put(obj));
+  return obj;
+}
+
+async function get(store, id) {
+  const s = await tx(store, 'readonly');
+  return wrap(s.get(id));
+}
+
+async function getAll(store) {
+  const s = await tx(store, 'readonly');
+  return wrap(s.getAll());
+}
+
+async function getAllBy(store, index, value) {
+  const s = await tx(store, 'readonly');
+  return wrap(s.index(index).getAll(value));
+}
+
+async function remove(store, id) {
+  const s = await tx(store, 'readwrite');
+  return wrap(s.delete(id));
+}
+
+async function removeAllBy(store, index, value) {
+  const itens = await getAllBy(store, index, value);
+  await Promise.all(itens.map((i) => remove(store, i.id)));
+  return itens.length;
+}
+
+function uid(prefix = 'id') {
+  const rand = crypto.getRandomValues(new Uint32Array(2));
+  return `${prefix}_${Date.now().toString(36)}_${rand[0].toString(36)}${rand[1].toString(36)}`;
+}
+
+/** Estimativa de uso de armazenamento, para avisar antes de encher o aparelho. */
+async function uso() {
+  if (!navigator.storage?.estimate) return null;
+  const { usage = 0, quota = 0 } = await navigator.storage.estimate();
+  return { usage, quota };
+}
+
+
+// ===================== js/checklist.js =====================
+
+/**
+ * Catálogo de itens fiscalizados no transporte escolar.
+ *
+ * Cada item gera, quando marcado como IRREGULAR, uma frase padronizada que é
+ * usada automaticamente na redação do relatório final (campo "Observações"),
+ * no mesmo estilo do Relatório de Fiscalização nº 01/2026.
+ *
+ * Os textos de base legal são editáveis: ajuste-os conforme a legislação
+ * municipal aplicável e confira os incisos dos arts. 230 e 231 do CTB antes
+ * de encaminhar o relatório.
+ */
+
+const GRUPOS = [
+  { id: 'condutor', titulo: 'Documentação do condutor', icone: '👤' },
+  { id: 'veiculo', titulo: 'Documentação do veículo', icone: '📄' },
+  { id: 'equipamentos', titulo: 'Equipamentos e identificação', icone: '🚐' },
+  { id: 'conservacao', titulo: 'Conservação e segurança', icone: '🔧' },
+  { id: 'operacao', titulo: 'Condições de operação', icone: '🎒' },
+];
+
+/**
+ * status possíveis por item: 'conforme' | 'irregular' | 'na' | null (não verificado)
+ * gravidade: referência para triagem interna da equipe.
+ */
+const ITENS = [
+  // ---------------------------------------------------------------- condutor
+  {
+    id: 'cnh_categoria',
+    grupo: 'condutor',
+    titulo: 'CNH categoria D (ou superior)',
+    ajuda: 'Conferir a categoria impressa na CNH. Categorias C ou B não autorizam o transporte escolar.',
+    frase: 'condutor não habilitado na categoria exigida (mínimo categoria D)',
+    base: 'CTB, art. 138, II',
+    gravidade: 'gravissima',
+  },
+  {
+    id: 'cnh_validade',
+    grupo: 'condutor',
+    titulo: 'CNH dentro da validade',
+    frase: 'CNH vencida',
+    base: 'CTB, art. 162, V',
+    gravidade: 'gravissima',
+  },
+  {
+    id: 'cete',
+    grupo: 'condutor',
+    titulo: 'Curso especializado de transporte escolar (CETE)',
+    ajuda: 'Certificado do curso especializado, nos termos da regulamentação do CONTRAN.',
+    frase: 'condutor sem comprovação de conclusão do Curso CETE',
+    base: 'CTB, art. 138, IV',
+    gravidade: 'gravissima',
+  },
+  {
+    id: 'autorizacao',
+    grupo: 'condutor',
+    titulo: 'Autorização para exercer a atividade de condutor escolar',
+    ajuda: 'Autorização expedida pelo órgão executivo de trânsito / poder concedente.',
+    frase: 'ausência de autorização para o exercício da atividade',
+    base: 'CTB, arts. 136 e 137',
+    gravidade: 'gravissima',
+  },
+  {
+    id: 'autorizacao_afixada',
+    grupo: 'condutor',
+    titulo: 'Autorização afixada no interior do veículo, com a lotação',
+    frase: 'autorização não afixada na parte interna do veículo em local visível',
+    base: 'CTB, art. 137',
+    gravidade: 'media',
+  },
+  {
+    id: 'psicotecnico',
+    grupo: 'condutor',
+    titulo: 'Exame psicotécnico específico vigente',
+    frase: 'ausência de exame psicotécnico para transporte escolar',
+    base: 'CTB, art. 147 c/c regulamentação do CONTRAN',
+    gravidade: 'gravissima',
+  },
+  {
+    id: 'matricula_detran',
+    grupo: 'condutor',
+    titulo: 'Matrícula/cadastro do condutor no DETRAN',
+    frase: 'ausência de matrícula no DETRAN',
+    base: 'Regulamentação do órgão executivo estadual de trânsito',
+    gravidade: 'grave',
+  },
+  {
+    id: 'idade_21',
+    grupo: 'condutor',
+    titulo: 'Condutor maior de 21 anos',
+    frase: 'condutor com idade inferior a 21 anos',
+    base: 'CTB, art. 138, I',
+    gravidade: 'gravissima',
+  },
+  {
+    id: 'prontuario',
+    grupo: 'condutor',
+    titulo: 'Prontuário sem infração grave/gravíssima nos últimos 12 meses',
+    ajuda: 'Também impede a atividade a reincidência em infrações médias no período.',
+    frase: 'condutor com prontuário incompatível com a atividade (infrações graves/gravíssimas nos últimos 12 meses)',
+    base: 'CTB, art. 138, III',
+    gravidade: 'gravissima',
+  },
+
+  // ----------------------------------------------------------------- veículo
+  {
+    id: 'crlv',
+    grupo: 'veiculo',
+    titulo: 'CRLV vigente',
+    frase: 'veículo sem CRLV vigente',
+    base: 'CTB, art. 230, V',
+    gravidade: 'gravissima',
+  },
+  {
+    id: 'registro_passageiros',
+    grupo: 'veiculo',
+    titulo: 'Registro como veículo de passageiros',
+    frase: 'veículo não registrado na categoria de transporte de passageiros',
+    base: 'CTB, art. 136, I',
+    gravidade: 'grave',
+  },
+  {
+    id: 'inspecao_semestral',
+    grupo: 'veiculo',
+    titulo: 'Inspeção semestral de segurança em dia',
+    ajuda: 'Vistoria semestral dos equipamentos obrigatórios e de segurança.',
+    frase: 'ausência de inspeção semestral de segurança',
+    base: 'CTB, art. 136, II',
+    gravidade: 'grave',
+  },
+  {
+    id: 'cadastro_municipal',
+    grupo: 'veiculo',
+    titulo: 'Cadastro/permissão municipal para o transporte escolar',
+    ajuda: 'Exigências próprias do Município (art. 139 do CTB).',
+    frase: 'ausência de cadastro/permissão municipal para o transporte escolar',
+    base: 'CTB, art. 139 c/c legislação municipal',
+    gravidade: 'administrativa',
+  },
+  {
+    id: 'contrato_prefeitura',
+    grupo: 'veiculo',
+    titulo: 'Contrato/credenciamento com a Prefeitura (serviço terceirizado)',
+    frase: 'veículo sem contrato ou credenciamento válido junto à Administração Municipal',
+    base: 'Lei nº 14.133/2021 c/c legislação municipal',
+    gravidade: 'administrativa',
+  },
+  {
+    id: 'seguro',
+    grupo: 'veiculo',
+    titulo: 'Seguro obrigatório/contratual em vigor',
+    frase: 'ausência de comprovação de seguro em vigor',
+    base: 'Edital/contrato administrativo',
+    gravidade: 'administrativa',
+  },
+
+  // ------------------------------------------------------------ equipamentos
+  {
+    id: 'faixa_escolar',
+    grupo: 'equipamentos',
+    titulo: 'Faixa amarela horizontal com o dístico "ESCOLAR"',
+    ajuda: 'Faixa de 40 cm de largura, à meia altura, nas laterais e na traseira, com o dístico ESCOLAR em preto.',
+    frase: 'ausência de faixa lateral amarela de identificação escolar',
+    base: 'CTB, art. 136, III',
+    gravidade: 'grave',
+  },
+  {
+    id: 'tacografo',
+    grupo: 'equipamentos',
+    titulo: 'Tacógrafo instalado e em funcionamento',
+    ajuda: 'Registrador instantâneo inalterável de velocidade e tempo.',
+    frase: 'ausência ou ineficiência do equipamento obrigatório (tacógrafo)',
+    base: 'CTB, art. 136, IV',
+    gravidade: 'grave',
+  },
+  {
+    id: 'tacografo_laudo',
+    grupo: 'equipamentos',
+    titulo: 'Laudo/aferição do tacógrafo vigente',
+    frase: 'ausência de laudo de aferição do tacógrafo',
+    base: 'Resolução CONTRAN sobre cronotacógrafo',
+    gravidade: 'grave',
+  },
+  {
+    id: 'cintos',
+    grupo: 'equipamentos',
+    titulo: 'Cintos de segurança para todos os passageiros',
+    ajuda: 'Em número igual à lotação e em condições de uso.',
+    frase: 'ausência ou ineficiência de equipamento obrigatório (cinto de segurança)',
+    base: 'CTB, art. 136, VI',
+    gravidade: 'grave',
+  },
+  {
+    id: 'lanternas',
+    grupo: 'equipamentos',
+    titulo: 'Lanternas dianteiras (branca/âmbar) e traseiras (vermelhas)',
+    frase: 'ausência das lanternas obrigatórias de identificação do transporte escolar',
+    base: 'CTB, art. 136, V',
+    gravidade: 'grave',
+  },
+  {
+    id: 'iluminacao',
+    grupo: 'equipamentos',
+    titulo: 'Sistema de iluminação original e em funcionamento',
+    ajuda: 'Verificar faróis, lanternas, luz de freio e setas; anotar alterações e lâmpadas queimadas.',
+    frase: 'sistema de iluminação alterado ou em desconformidade',
+    base: 'CTB, art. 230',
+    gravidade: 'grave',
+  },
+  {
+    id: 'farois_ligados',
+    grupo: 'equipamentos',
+    titulo: 'Faróis acesos durante a circulação',
+    frase: 'circulação sem os faróis acesos',
+    base: 'CTB, art. 40, I e IV',
+    gravidade: 'media',
+  },
+  {
+    id: 'placas',
+    grupo: 'equipamentos',
+    titulo: 'Placas de identificação legíveis e visíveis',
+    frase: 'placa de identificação ilegível',
+    base: 'CTB, art. 230, VI',
+    gravidade: 'grave',
+  },
+  {
+    id: 'equip_contran',
+    grupo: 'equipamentos',
+    titulo: 'Demais equipamentos obrigatórios conforme o CONTRAN',
+    ajuda: 'Extintor (quando exigido), saída de emergência, martelo, sinalização de emergência, estepe, etc.',
+    frase: 'equipamento obrigatório em desacordo com o estabelecido pelo CONTRAN',
+    base: 'CTB, art. 136, VII c/c art. 230',
+    gravidade: 'grave',
+  },
+  {
+    id: 'saida_emergencia',
+    grupo: 'equipamentos',
+    titulo: 'Saída de emergência sinalizada e desobstruída',
+    frase: 'saída de emergência obstruída ou sem sinalização',
+    base: 'Regulamentação do CONTRAN',
+    gravidade: 'grave',
+  },
+
+  // ------------------------------------------------------------- conservação
+  {
+    id: 'pneus',
+    grupo: 'conservacao',
+    titulo: 'Pneus em condições de uso',
+    ajuda: 'Sulco mínimo de 1,6 mm, sem bolhas, cortes ou deformações; verificar o estepe.',
+    frase: 'pneus em más condições de uso',
+    base: 'CTB, art. 230, XVIII',
+    gravidade: 'grave',
+  },
+  {
+    id: 'parabrisa',
+    grupo: 'conservacao',
+    titulo: 'Para-brisa e vidros íntegros',
+    frase: 'para-brisa trincado',
+    base: 'CTB, art. 230, XVIII',
+    gravidade: 'grave',
+  },
+  {
+    id: 'freios',
+    grupo: 'conservacao',
+    titulo: 'Sistema de freios em funcionamento',
+    frase: 'sistema de freios em desconformidade',
+    base: 'CTB, art. 230, XVIII',
+    gravidade: 'grave',
+  },
+  {
+    id: 'portas_bancos',
+    grupo: 'conservacao',
+    titulo: 'Portas, bancos e estruturas internas firmes e íntegros',
+    frase: 'bancos, portas ou estruturas internas em más condições',
+    base: 'CTB, art. 230, XVIII',
+    gravidade: 'grave',
+  },
+  {
+    id: 'conservacao_geral',
+    grupo: 'conservacao',
+    titulo: 'Estado geral de conservação e limpeza',
+    frase: 'veículo em mau estado de conservação, comprometendo a segurança',
+    base: 'CTB, art. 230, XVIII',
+    gravidade: 'grave',
+  },
+
+  // ---------------------------------------------------------------- operação
+  {
+    id: 'lotacao',
+    grupo: 'operacao',
+    titulo: 'Número de escolares dentro da lotação autorizada',
+    frase: 'transporte de escolares em número superior à lotação permitida',
+    base: 'CTB, art. 137, parágrafo único',
+    gravidade: 'gravissima',
+  },
+  {
+    id: 'monitor',
+    grupo: 'operacao',
+    titulo: 'Monitor/acompanhante a bordo (quando exigido pelo Município)',
+    frase: 'ausência de monitor acompanhante, exigido pela norma municipal',
+    base: 'CTB, art. 139 c/c legislação municipal',
+    gravidade: 'administrativa',
+  },
+  {
+    id: 'itinerario',
+    grupo: 'operacao',
+    titulo: 'Itinerário e pontos de embarque conforme o autorizado',
+    frase: 'operação em itinerário diverso do autorizado',
+    base: 'Contrato/permissão municipal',
+    gravidade: 'administrativa',
+  },
+  {
+    id: 'carga_carona',
+    grupo: 'operacao',
+    titulo: 'Ausência de transporte de carga ou de passageiros estranhos ao serviço',
+    frase: 'transporte de carga ou de passageiros estranhos ao serviço escolar',
+    base: 'CTB, art. 230 c/c contrato administrativo',
+    gravidade: 'media',
+  },
+];
+
+const ITENS_POR_ID = Object.fromEntries(ITENS.map((i) => [i.id, i]));
+
+const TIPOS_VEICULO = [
+  'Ônibus',
+  'Micro-ônibus',
+  'Van',
+  'Kombi/Furgão',
+  'Camioneta',
+  'Embarcação escolar',
+  'Outro',
+];
+
+const MEDIDAS = [
+  'Liberado',
+  'Liberado com notificação',
+  'Retido para regularização',
+  'Removido ao depósito',
+  'Serviço interrompido',
+];
+
+const GRAVIDADE_LABEL = {
+  gravissima: 'Gravíssima',
+  grave: 'Grave',
+  media: 'Média',
+  administrativa: 'Administrativa',
+};
+
+
+// ===================== js/fotos.js =====================
+
+/**
+ * Captura e tratamento das fotografias.
+ *
+ * As imagens são redimensionadas e recomprimidas no próprio aparelho antes de
+ * serem gravadas, para que uma fiscalização com dezenas de veículos caiba na
+ * memória do celular e o relatório final não fique impossível de compartilhar.
+ */
+
+
+const LADO_MAXIMO = 1400; // px
+const QUALIDADE = 0.72;
+
+/** Redimensiona/comprime um File de imagem e devolve um Blob JPEG. */
+async function comprimir(file) {
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return file; // formato exótico: grava como veio
+  const escala = Math.min(1, LADO_MAXIMO / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * escala);
+  const h = Math.round(bitmap.height * escala);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+  bitmap.close?.();
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', QUALIDADE));
+  return blob || file;
+}
+
+async function salvarFotos(files, { veiculoId, fiscalizacaoId, itemId = null }) {
+  const salvas = [];
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    const blob = await comprimir(file);
+    const foto = {
+      id: uid('foto'),
+      veiculoId,
+      fiscalizacaoId,
+      itemId,
+      blob,
+      legenda: '',
+      criadoEm: new Date().toISOString(),
+    };
+    await put('fotos', foto);
+    salvas.push(foto);
+  }
+  return salvas;
+}
+
+function fotosDoVeiculo(veiculoId) {
+  return getAllBy('fotos', 'veiculoId', veiculoId);
+}
+
+function fotosDaFiscalizacao(fiscalizacaoId) {
+  return getAllBy('fotos', 'fiscalizacaoId', fiscalizacaoId);
+}
+
+function excluirFoto(id) {
+  return remove('fotos', id);
+}
+
+function atualizarFoto(foto) {
+  return put('fotos', foto);
+}
+
+/** Converte um Blob em data URL (usado na montagem do relatório e no backup). */
+function blobParaDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(blob);
+  });
+}
+
+async function dataURLParaBlob(dataURL) {
+  const resp = await fetch(dataURL);
+  return resp.blob();
+}
+
+
+// ===================== js/store.js =====================
+
+/**
+ * Modelo de dados e regras de negócio da fiscalização.
+ */
+
+
+const CHAVE_ATUAL = 'fte:fiscalizacaoAtual';
+const CHAVE_INSPETOR = 'fte:inspetor';
+
+// ------------------------------------------------------------- fiscalizações
+
+function novaFiscalizacao(dados = {}) {
+  const hoje = new Date();
+  return {
+    id: uid('fisc'),
+    numero: '01',
+    ano: String(hoje.getFullYear()),
+    data: hoje.toISOString().slice(0, 10),
+    hora: '08:00',
+    municipio: '',
+    local: '',
+    promotoria: 'Promotoria de Justiça de Prado',
+    orgaoMp: 'MINISTÉRIO PÚBLICO DO ESTADO DA BAHIA',
+    promotor: '',
+    apoio: 'Polícia Militar da Bahia — Companhia Independente de Polícia Rodoviária',
+    equipe: '',
+    conclusao: '',
+    criadoEm: hoje.toISOString(),
+    atualizadoEm: hoje.toISOString(),
+    ...dados,
+  };
+}
+
+async function salvarFiscalizacao(f) {
+  f.atualizadoEm = new Date().toISOString();
+  await put('fiscalizacoes', f);
+  return f;
+}
+
+function listarFiscalizacoes() {
+  return getAll('fiscalizacoes').then((l) =>
+    l.sort((a, b) => (b.criadoEm || '').localeCompare(a.criadoEm || ''))
+  );
+}
+
+function obterFiscalizacao(id) {
+  return get('fiscalizacoes', id);
+}
+
+async function excluirFiscalizacao(id) {
+  await removeAllBy('fotos', 'fiscalizacaoId', id);
+  await removeAllBy('veiculos', 'fiscalizacaoId', id);
+  await remove('fiscalizacoes', id);
+  if (idFiscalizacaoAtual() === id) localStorage.removeItem(CHAVE_ATUAL);
+}
+
+function idFiscalizacaoAtual() {
+  return localStorage.getItem(CHAVE_ATUAL);
+}
+
+function definirFiscalizacaoAtual(id) {
+  if (id) localStorage.setItem(CHAVE_ATUAL, id);
+  else localStorage.removeItem(CHAVE_ATUAL);
+}
+
+function inspetorAtual() {
+  return localStorage.getItem(CHAVE_INSPETOR) || '';
+}
+
+function definirInspetor(nome) {
+  localStorage.setItem(CHAVE_INSPETOR, nome || '');
+}
+
+// ------------------------------------------------------------------ veículos
+
+function novoVeiculo(fiscalizacaoId, ordem) {
+  const agora = new Date().toISOString();
+  return {
+    id: uid('veic'),
+    fiscalizacaoId,
+    ordem,
+    placa: '',
+    tipo: 'Van',
+    marcaModelo: '',
+    ano: '',
+    cor: '',
+    renavam: '',
+    lotacao: '',
+    alunosBordo: '',
+    permissionario: '',
+    escolaRota: '',
+    condutorNome: '',
+    condutorCpf: '',
+    condutorCnh: '',
+    condutorCategoria: '',
+    condutorValidadeCnh: '',
+    condutorTelefone: '',
+    monitorPossui: false,
+    monitorNome: '',
+    itens: {},
+    obsGerais: '',
+    autuado: false,
+    autuacaoNumero: '',
+    medida: 'Liberado',
+    geo: null,
+    inspetor: inspetorAtual(),
+    criadoEm: agora,
+    atualizadoEm: agora,
+  };
+}
+
+async function salvarVeiculo(v) {
+  v.atualizadoEm = new Date().toISOString();
+  v.placa = normalizarPlaca(v.placa);
+  await put('veiculos', v);
+  return v;
+}
+
+function obterVeiculo(id) {
+  return get('veiculos', id);
+}
+
+function listarVeiculos(fiscalizacaoId) {
+  return getAllBy('veiculos', 'fiscalizacaoId', fiscalizacaoId).then((l) =>
+    l.sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+  );
+}
+
+async function excluirVeiculo(id) {
+  await removeAllBy('fotos', 'veiculoId', id);
+  await remove('veiculos', id);
+}
+
+async function proximaOrdem(fiscalizacaoId) {
+  const lista = await listarVeiculos(fiscalizacaoId);
+  return lista.reduce((max, v) => Math.max(max, v.ordem || 0), 0) + 1;
+}
+
+/** Renumera os veículos em sequência (usado após exclusões e importações). */
+async function renumerar(fiscalizacaoId) {
+  const lista = await listarVeiculos(fiscalizacaoId);
+  let n = 1;
+  for (const v of lista) {
+    if (v.ordem !== n) {
+      v.ordem = n;
+      await put('veiculos', v);
+    }
+    n += 1;
+  }
+  return lista.length;
+}
+
+// -------------------------------------------------------------------- placas
+
+function normalizarPlaca(placa) {
+  return String(placa || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 7);
+}
+
+const RE_ANTIGA = /^[A-Z]{3}[0-9]{4}$/;
+const RE_MERCOSUL = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;
+
+function placaValida(placa) {
+  const p = normalizarPlaca(placa);
+  return RE_ANTIGA.test(p) || RE_MERCOSUL.test(p);
+}
+
+function formatarPlaca(placa) {
+  const p = normalizarPlaca(placa);
+  return p.length === 7 ? `${p.slice(0, 3)}-${p.slice(3)}` : p;
+}
+
+// ------------------------------------------------------------- irregularidades
+
+/** Lista de itens marcados como irregulares em um veículo. */
+function irregularidades(veiculo) {
+  return ITENS.filter((item) => veiculo.itens?.[item.id]?.status === 'irregular').map((item) => ({
+    item,
+    obs: (veiculo.itens[item.id].obs || '').trim(),
+  }));
+}
+
+function contarIrregularidades(veiculo) {
+  return irregularidades(veiculo).length;
+}
+
+function itensVerificados(veiculo) {
+  return Object.values(veiculo.itens || {}).filter((i) => i.status).length;
+}
+
+/**
+ * Monta o texto do campo "Observações" do relatório, no padrão do modelo:
+ * frases separadas por ponto e vírgula, a última ligada por "e", terminando
+ * com ponto final.
+ */
+function frasesIrregularidades(veiculo) {
+  const partes = irregularidades(veiculo).map(({ item, obs }) =>
+    obs ? `${item.frase} (${obs})` : item.frase
+  );
+  const extra = (veiculo.obsGerais || '').trim();
+  if (extra) partes.push(extra.replace(/\.$/, ''));
+  if (!partes.length) return 'Nenhuma irregularidade constatada.';
+  let texto;
+  if (partes.length === 1) texto = partes[0];
+  else texto = `${partes.slice(0, -1).join('; ')}; e ${partes[partes.length - 1]}`;
+  return `${texto.charAt(0).toUpperCase()}${texto.slice(1)}.`;
+}
+
+/** Estatísticas consolidadas da fiscalização. */
+function consolidar(veiculos) {
+  const contagem = new Map();
+  let totalIrregularidades = 0;
+  let regulares = 0;
+  for (const v of veiculos) {
+    const irr = irregularidades(v);
+    if (!irr.length) regulares += 1;
+    totalIrregularidades += irr.length;
+    for (const { item } of irr) {
+      contagem.set(item.id, (contagem.get(item.id) || 0) + 1);
+    }
+  }
+  const ranking = [...contagem.entries()]
+    .map(([id, qtd]) => ({ item: ITENS_POR_ID[id], qtd, pct: veiculos.length ? (qtd * 100) / veiculos.length : 0 }))
+    .filter((r) => r.item)
+    .sort((a, b) => b.qtd - a.qtd || a.item.titulo.localeCompare(b.item.titulo));
+  return {
+    totalVeiculos: veiculos.length,
+    totalIrregularidades,
+    regulares,
+    irregulares: veiculos.length - regulares,
+    autuados: veiculos.filter((v) => v.autuado).length,
+    retidos: veiculos.filter((v) => /Retido|Removido|interrompido/i.test(v.medida || '')).length,
+    ranking,
+  };
+}
+
+// --------------------------------------------------------- backup / mesclagem
+
+/** Aplica os dados de um veículo importado sobre a base local. */
+async function mesclarVeiculos(fiscalizacaoId, veiculosImportados) {
+  const atuais = await listarVeiculos(fiscalizacaoId);
+  const porPlaca = new Map(atuais.filter((v) => v.placa).map((v) => [v.placa, v]));
+  let novos = 0;
+  let atualizados = 0;
+  let ignorados = 0;
+  const mapaIds = {};
+  let ordem = await proximaOrdem(fiscalizacaoId);
+
+  for (const imp of veiculosImportados) {
+    const placa = normalizarPlaca(imp.placa);
+    const existente = placa ? porPlaca.get(placa) : null;
+    if (existente) {
+      if ((imp.atualizadoEm || '') > (existente.atualizadoEm || '')) {
+        const preservado = { ...imp, id: existente.id, fiscalizacaoId, ordem: existente.ordem };
+        await put('veiculos', preservado);
+        mapaIds[imp.id] = existente.id;
+        atualizados += 1;
+      } else {
+        mapaIds[imp.id] = existente.id;
+        ignorados += 1;
+      }
+    } else {
+      const novoId = uid('veic');
+      const copia = { ...imp, id: novoId, fiscalizacaoId, ordem: ordem++, placa };
+      await put('veiculos', copia);
+      if (placa) porPlaca.set(placa, copia);
+      mapaIds[imp.id] = novoId;
+      novos += 1;
+    }
+  }
+  return { novos, atualizados, ignorados, mapaIds };
+}
+
+
+// ===================== js/relatorio.js =====================
+
+/**
+ * Geração do relatório final de fiscalização.
+ *
+ * A estrutura reproduz o padrão do "RELATÓRIO DE FISCALIZAÇÃO – Nº 01/2026",
+ * acrescida de quadro-resumo estatístico, anexo fotográfico e campo de
+ * providências/conclusão.
+ */
+
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function dataPorExtenso(iso) {
+  if (!iso) return '';
+  const [a, m, d] = iso.split('-').map(Number);
+  const meses = [
+    'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+    'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+  ];
+  return `${String(d).padStart(2, '0')} de ${meses[m - 1]} de ${a}`;
+}
+
+function dataCurta(iso) {
+  if (!iso) return '';
+  const [a, m, d] = iso.split('-');
+  return `${d}/${m}/${a}`;
+}
+
+function num2(n) {
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * Monta o HTML completo do relatório.
+ * @param {object} opts.comFotos inclui o anexo fotográfico (data URLs)
+ */
+async function montarRelatorio(fisc, veiculos, opts = {}) {
+  const { comFotos = true } = opts;
+  const stats = consolidar(veiculos);
+
+  let fotosPorVeiculo = new Map();
+  if (comFotos) {
+    const fotos = await fotosDaFiscalizacao(fisc.id);
+    for (const f of fotos) {
+      if (!fotosPorVeiculo.has(f.veiculoId)) fotosPorVeiculo.set(f.veiculoId, []);
+      fotosPorVeiculo.get(f.veiculoId).push(f);
+    }
+    for (const [id, lista] of fotosPorVeiculo) {
+      const comURL = [];
+      for (const f of lista.sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''))) {
+        comURL.push({ ...f, url: await blobParaDataURL(f.blob) });
+      }
+      fotosPorVeiculo.set(id, comURL);
+    }
+  }
+
+  const cabecalho = `
+    <header class="cabecalho">
+      <div class="orgao">${esc(fisc.orgaoMp)}</div>
+      <div class="orgao">${esc(fisc.promotoria)}</div>
+      ${fisc.apoio ? `<div class="apoio">Apoio operacional: ${esc(fisc.apoio)}</div>` : ''}
+      <h1>RELATÓRIO DE FISCALIZAÇÃO – Nº ${esc(fisc.numero)}/${esc(fisc.ano)}</h1>
+      <div class="subtitulo">Transporte escolar — ${esc(fisc.municipio || 'município não informado')}</div>
+    </header>`;
+
+  const preambulo = `
+    <p class="preambulo">
+      Em atendimento à determinação da ${esc(fisc.promotoria)}, foi realizada fiscalização nos veículos
+      abaixo elencados, a fim de averiguar as condições de segurança, a regularidade da documentação,
+      o atendimento aos requisitos previstos na legislação de trânsito e demais normas aplicáveis ao
+      transporte escolar do município de ${esc(fisc.municipio || '—')}.
+    </p>`;
+
+  const identificacao = `
+    <table class="dados">
+      <tbody>
+        <tr><th>DATA</th><td>${esc(dataCurta(fisc.data))}</td></tr>
+        <tr><th>HORÁRIO</th><td>${esc(fisc.hora)}</td></tr>
+        <tr><th>MUNICÍPIO</th><td>${esc(fisc.municipio)}</td></tr>
+        ${fisc.local ? `<tr><th>LOCAL</th><td>${esc(fisc.local)}</td></tr>` : ''}
+        <tr><th>QUANTITATIVO DE VEÍCULOS</th><td>${stats.totalVeiculos}</td></tr>
+        ${fisc.equipe ? `<tr><th>EQUIPE</th><td>${esc(fisc.equipe)}</td></tr>` : ''}
+      </tbody>
+    </table>`;
+
+  const resumo = `
+    <section>
+      <h2>1. SÍNTESE DO RESULTADO</h2>
+      <table class="dados">
+        <tbody>
+          <tr><th>Veículos fiscalizados</th><td>${stats.totalVeiculos}</td></tr>
+          <tr><th>Veículos com irregularidades</th><td>${stats.irregulares} (${pct(stats.irregulares, stats.totalVeiculos)})</td></tr>
+          <tr><th>Veículos sem irregularidades</th><td>${stats.regulares} (${pct(stats.regulares, stats.totalVeiculos)})</td></tr>
+          <tr><th>Total de irregularidades constatadas</th><td>${stats.totalIrregularidades}</td></tr>
+          <tr><th>Veículos autuados</th><td>${stats.autuados}</td></tr>
+          <tr><th>Veículos retidos/removidos</th><td>${stats.retidos}</td></tr>
+        </tbody>
+      </table>
+
+      <h3>1.1. Irregularidades por incidência</h3>
+      ${
+        stats.ranking.length
+          ? `<table class="ranking">
+              <thead><tr><th>#</th><th>Irregularidade</th><th>Base normativa</th><th>Nat.</th><th>Veíc.</th><th>%</th></tr></thead>
+              <tbody>
+                ${stats.ranking
+                  .map(
+                    (r, i) => `<tr>
+                      <td>${i + 1}</td>
+                      <td>${esc(r.item.titulo)}</td>
+                      <td class="base">${esc(r.item.base || '')}</td>
+                      <td>${esc(GRAVIDADE_LABEL[r.item.gravidade] || '')}</td>
+                      <td class="num">${r.qtd}</td>
+                      <td class="num">${r.pct.toFixed(0)}%</td>
+                    </tr>`
+                  )
+                  .join('')}
+              </tbody>
+            </table>`
+          : '<p>Não foram constatadas irregularidades.</p>'
+      }
+    </section>`;
+
+  const listaVeiculos = `
+    <section>
+      <h2>2. VEÍCULOS ABORDADOS</h2>
+      ${veiculos
+        .map((v, i) => {
+          const linhas = [];
+          const ident = [v.tipo, v.marcaModelo, v.ano, v.cor].filter(Boolean).join(' — ');
+          if (ident) linhas.push(`<div class="linha"><b>Veículo:</b> ${esc(ident)}</div>`);
+          if (v.permissionario) linhas.push(`<div class="linha"><b>Permissionário/empresa:</b> ${esc(v.permissionario)}</div>`);
+          if (v.escolaRota) linhas.push(`<div class="linha"><b>Rota/escola:</b> ${esc(v.escolaRota)}</div>`);
+          const cond = [v.condutorNome, v.condutorCpf ? `CPF ${v.condutorCpf}` : '', v.condutorCnh ? `CNH ${v.condutorCnh}${v.condutorCategoria ? ` cat. ${v.condutorCategoria}` : ''}` : '']
+            .filter(Boolean)
+            .join(' — ');
+          if (cond) linhas.push(`<div class="linha"><b>Condutor:</b> ${esc(cond)}</div>`);
+          if (v.lotacao || v.alunosBordo) {
+            linhas.push(
+              `<div class="linha"><b>Lotação:</b> ${esc(v.lotacao || '—')} — <b>escolares a bordo:</b> ${esc(v.alunosBordo || '—')}</div>`
+            );
+          }
+          if (v.monitorPossui) linhas.push(`<div class="linha"><b>Monitor:</b> ${esc(v.monitorNome || 'presente')}</div>`);
+          if (v.autuado) linhas.push(`<div class="linha"><b>Autuação:</b> ${esc(v.autuacaoNumero || 'lavrada')}</div>`);
+          if (v.medida && v.medida !== 'Liberado') linhas.push(`<div class="linha"><b>Medida adotada:</b> ${esc(v.medida)}</div>`);
+
+          const fotos = fotosPorVeiculo.get(v.id) || [];
+          const qtdIrr = irregularidades(v).length;
+          return `
+            <article class="veiculo">
+              <h3>Veículo ${num2(v.ordem || i + 1)}</h3>
+              <div class="linha"><b>Placa:</b> ${esc(formatarPlaca(v.placa) || 'não identificada')}</div>
+              ${linhas.join('')}
+              <div class="obs"><b>${qtdIrr === 1 ? 'Observação' : 'Observações'}:</b> ${esc(frasesIrregularidades(v))}</div>
+              ${
+                fotos.length
+                  ? `<div class="linha fotos-ref">Registro fotográfico: ${fotos.length} imagem(ns) — Anexo I.</div>`
+                  : ''
+              }
+            </article>`;
+        })
+        .join('')}
+    </section>`;
+
+  const conclusao = fisc.conclusao?.trim()
+    ? `<section>
+         <h2>3. CONCLUSÃO E PROVIDÊNCIAS</h2>
+         ${fisc.conclusao
+           .trim()
+           .split(/\n{2,}/)
+           .map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`)
+           .join('')}
+       </section>`
+    : '';
+
+  const anexo =
+    comFotos && fotosPorVeiculo.size
+      ? `<section class="anexo">
+           <h2>ANEXO I — REGISTRO FOTOGRÁFICO</h2>
+           ${veiculos
+             .map((v, i) => {
+               const fotos = fotosPorVeiculo.get(v.id) || [];
+               if (!fotos.length) return '';
+               return `
+                 <div class="grupo-fotos">
+                   <h3>Veículo ${num2(v.ordem || i + 1)} — Placa ${esc(formatarPlaca(v.placa) || '—')}</h3>
+                   <div class="grade-fotos">
+                     ${fotos
+                       .map(
+                         (f, j) => `<figure>
+                            <img src="${f.url}" alt="Veículo ${num2(v.ordem || i + 1)} foto ${j + 1}">
+                            <figcaption>Foto ${j + 1}${f.legenda ? ` — ${esc(f.legenda)}` : ''}</figcaption>
+                          </figure>`
+                       )
+                       .join('')}
+                   </div>
+                 </div>`;
+             })
+             .join('')}
+         </section>`
+      : '';
+
+  const assinaturas = `
+    <section class="assinaturas">
+      <p class="fecho">Respeitosamente,</p>
+      <div class="assinatura">
+        <div class="linha-assinatura"></div>
+        <div>${esc(fisc.promotor || 'Promotor(a) de Justiça')}</div>
+        <div class="cargo">${esc(fisc.promotoria)}</div>
+      </div>
+      <div class="assinatura">
+        <div class="linha-assinatura"></div>
+        <div>Responsável pelo apoio operacional</div>
+        <div class="cargo">${esc(fisc.apoio || '')}</div>
+      </div>
+      <p class="rodape-doc">${esc(fisc.municipio || '')}${fisc.municipio ? ', ' : ''}${esc(dataPorExtenso(fisc.data))}.</p>
+    </section>`;
+
+  return `${cabecalho}${preambulo}${identificacao}${resumo}${listaVeiculos}${conclusao}${anexo}${assinaturas}`;
+}
+
+function pct(parte, total) {
+  if (!total) return '0%';
+  return `${((parte * 100) / total).toFixed(0)}%`;
+}
+
+/** CSS aplicado tanto na visualização quanto na impressão/exportação. */
+const CSS_RELATORIO = `
+  .documento { font-family: "Times New Roman", Georgia, serif; color: #000; background: #fff; line-height: 1.45; font-size: 12pt; }
+  .documento .cabecalho { text-align: center; margin-bottom: 18px; }
+  .documento .orgao { font-weight: bold; text-transform: uppercase; font-size: 11pt; letter-spacing: .3px; }
+  .documento .apoio { font-size: 10pt; margin-top: 4px; }
+  .documento h1 { font-size: 13pt; margin: 16px 0 4px; text-transform: uppercase; }
+  .documento .subtitulo { font-size: 11pt; font-style: italic; }
+  .documento h2 { font-size: 12pt; margin: 20px 0 8px; text-transform: uppercase; border-bottom: 1px solid #000; padding-bottom: 3px; }
+  .documento h3 { font-size: 11.5pt; margin: 14px 0 4px; }
+  .documento p { text-align: justify; margin: 8px 0; }
+  .documento .preambulo { text-indent: 2cm; }
+  .documento table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 10.5pt; }
+  .documento table th, .documento table td { border: 1px solid #444; padding: 4px 6px; text-align: left; vertical-align: top; }
+  .documento table.dados th { width: 38%; background: #f0f0f0; }
+  .documento table.ranking thead th { background: #f0f0f0; }
+  .documento table .num { text-align: right; }
+  .documento table .base { font-size: 9.5pt; }
+  .documento .veiculo { margin: 0 0 14px; page-break-inside: avoid; }
+  .documento .veiculo h3 { margin-bottom: 2px; }
+  .documento .linha { font-size: 11pt; }
+  .documento .obs { margin-top: 4px; text-align: justify; }
+  .documento .fotos-ref { font-style: italic; font-size: 10pt; }
+  .documento .grade-fotos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .documento figure { margin: 0; page-break-inside: avoid; }
+  .documento figure img { width: 100%; height: auto; border: 1px solid #666; }
+  .documento figcaption { font-size: 9.5pt; text-align: center; }
+  .documento .grupo-fotos { margin-bottom: 16px; page-break-inside: avoid; }
+  .documento .assinaturas { margin-top: 36px; text-align: center; }
+  .documento .fecho { text-align: center; }
+  .documento .assinatura { margin: 28px auto 0; width: 70%; }
+  .documento .linha-assinatura { border-top: 1px solid #000; margin-bottom: 4px; }
+  .documento .cargo { font-size: 10pt; }
+  .documento .rodape-doc { margin-top: 28px; text-align: center; font-size: 11pt; }
+  @page { size: A4; margin: 2.5cm 2cm; }
+`;
+
+/** Documento independente (usado no .doc e no HTML exportado). */
+function documentoCompleto(html, titulo) {
+  return `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<title>${esc(titulo)}</title>
+<style>${CSS_RELATORIO}</style>
+</head>
+<body><div class="documento">${html}</div></body>
+</html>`;
+}
+
+/** Planilha CSV com uma linha por veículo e colunas de irregularidades. */
+function gerarCSV(fisc, veiculos, itens) {
+  const sep = ';';
+  const cabecalho = [
+    'Nº', 'Placa', 'Tipo', 'Marca/Modelo', 'Ano', 'Permissionário', 'Rota/Escola',
+    'Condutor', 'CPF', 'CNH', 'Categoria', 'Lotação', 'Escolares a bordo',
+    'Monitor', 'Qtd. irregularidades', 'Autuado', 'Nº autuação', 'Medida', 'Observações',
+    ...itens.map((i) => i.titulo),
+  ];
+  const linhas = veiculos.map((v) => {
+    const base = [
+      v.ordem, formatarPlaca(v.placa), v.tipo, v.marcaModelo, v.ano, v.permissionario, v.escolaRota,
+      v.condutorNome, v.condutorCpf, v.condutorCnh, v.condutorCategoria, v.lotacao, v.alunosBordo,
+      v.monitorPossui ? (v.monitorNome || 'Sim') : 'Não',
+      irregularidades(v).length, v.autuado ? 'Sim' : 'Não', v.autuacaoNumero, v.medida,
+      frasesIrregularidades(v),
+    ];
+    const status = itens.map((i) => {
+      const s = v.itens?.[i.id];
+      if (!s?.status) return '';
+      const rotulo = { conforme: 'Conforme', irregular: 'IRREGULAR', na: 'N/A' }[s.status] || '';
+      return s.obs ? `${rotulo} - ${s.obs}` : rotulo;
+    });
+    return [...base, ...status];
+  });
+  const escapar = (c) => {
+    const s = String(c ?? '');
+    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return `﻿${[cabecalho, ...linhas].map((l) => l.map(escapar).join(sep)).join('\r\n')}`;
+}
+
+
+// ===================== js/backup.js =====================
+
+/**
+ * Backup, transferência entre aparelhos e consolidação do trabalho da equipe.
+ *
+ * Cada integrante da equipe exporta o arquivo .json da sua fiscalização e envia
+ * ao coordenador (WhatsApp, e-mail, cabo). O coordenador importa os arquivos:
+ * veículos com a mesma placa são consolidados (prevalece a versão mais recente)
+ * e os demais entram na sequência.
+ */
+
+
+const FORMATO = 'fte-backup/1';
+
+async function exportar(fiscalizacaoId, { comFotos = true } = {}) {
+  const fisc = await obterFiscalizacao(fiscalizacaoId);
+  const veiculos = await listarVeiculos(fiscalizacaoId);
+  const pacote = { formato: FORMATO, exportadoEm: new Date().toISOString(), fiscalizacao: fisc, veiculos, fotos: [] };
+  if (comFotos) {
+    const fotos = await fotosDaFiscalizacao(fiscalizacaoId);
+    for (const f of fotos) {
+      pacote.fotos.push({
+        // `origemId` acompanha a foto entre aparelhos e evita duplicação
+        // quando o mesmo arquivo é importado mais de uma vez.
+        id: f.origemId || f.id,
+        veiculoId: f.veiculoId,
+        itemId: f.itemId || null,
+        legenda: f.legenda || '',
+        criadoEm: f.criadoEm,
+        dataURL: await blobParaDataURL(f.blob),
+      });
+    }
+  }
+  return pacote;
+}
+
+/**
+ * @param destinoId  fiscalização local que receberá os dados. Se null, cria uma
+ *                   nova fiscalização a partir do pacote.
+ */
+async function importar(pacote, destinoId = null) {
+  if (!pacote || pacote.formato !== FORMATO) {
+    throw new Error('Arquivo não reconhecido — selecione um backup gerado por este aplicativo.');
+  }
+  let fisc;
+  if (destinoId) {
+    fisc = await obterFiscalizacao(destinoId);
+  } else {
+    fisc = novaFiscalizacao({ ...pacote.fiscalizacao, id: uid('fisc') });
+    await salvarFiscalizacao(fisc);
+  }
+
+  const { novos, atualizados, ignorados, mapaIds } = await mesclarVeiculos(fisc.id, pacote.veiculos || []);
+
+  let fotosImportadas = 0;
+  let fotosRepetidas = 0;
+  const jaExistentes = new Map(); // veiculoId -> Set de origens já gravadas
+  for (const f of pacote.fotos || []) {
+    const veiculoId = mapaIds[f.veiculoId];
+    if (!veiculoId) continue;
+    if (!jaExistentes.has(veiculoId)) {
+      const atuais = await fotosDoVeiculo(veiculoId);
+      jaExistentes.set(veiculoId, new Set(atuais.map((x) => x.origemId || x.id)));
+    }
+    const origens = jaExistentes.get(veiculoId);
+    if (origens.has(f.id)) {
+      fotosRepetidas += 1;
+      continue;
+    }
+    await put('fotos', {
+      id: uid('foto'),
+      origemId: f.id,
+      veiculoId,
+      fiscalizacaoId: fisc.id,
+      itemId: f.itemId || null,
+      legenda: f.legenda || '',
+      criadoEm: f.criadoEm || new Date().toISOString(),
+      blob: await dataURLParaBlob(f.dataURL),
+    });
+    origens.add(f.id);
+    fotosImportadas += 1;
+  }
+
+  await renumerar(fisc.id);
+  return { fiscalizacaoId: fisc.id, novos, atualizados, ignorados, fotos: fotosImportadas, fotosRepetidas };
+}
+
+function baixarArquivo(conteudo, nome, tipo) {
+  const blob = conteudo instanceof Blob ? conteudo : new Blob([conteudo], { type: tipo });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/**
+ * Extensões alternativas quando a hospedagem não aceita a original.
+ * O relatório .doc é HTML por dentro, então .html preserva o conteúdo.
+ */
+function alternativas(nome) {
+  if (/\.doc$/i.test(nome)) return [nome.replace(/\.doc$/i, '.html')];
+  if (/\.csv$/i.test(nome)) return [nome.replace(/\.csv$/i, '.txt')];
+  return [];
+}
+
+/**
+ * Quando o aplicativo roda como página publicada no claude.ai, o navegador
+ * bloqueia downloads comuns e a gravação passa por uma confirmação do próprio
+ * visualizador. Fora desse ambiente, esta função simplesmente não se aplica.
+ */
+async function salvarPelaPagina(blob, nome) {
+  const api = typeof globalThis.claude !== 'undefined' ? globalThis.claude : null;
+  if (!api?.use) return false;
+  const downloads = await api.use('downloads').catch(() => null);
+  if (!downloads) return false;
+  for (const tentativa of [nome, ...alternativas(nome)]) {
+    try {
+      await downloads.save({ filename: tentativa, data: blob });
+      return true;
+    } catch (e) {
+      // Extensão recusada: tenta a alternativa. Recusa do usuário: respeita.
+      if (e?.code === 'rejected_extension' || e?.code === 'extension_not_enabled') continue;
+      if (e?.code === 'declined' || e?.code === 'rate_limited') return true;
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Compartilhamento nativo do celular, com queda para download. */
+async function compartilharOuBaixar(conteudo, nome, tipo) {
+  const blob = conteudo instanceof Blob ? conteudo : new Blob([conteudo], { type: tipo });
+  const file = new File([blob], nome, { type: tipo });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: nome });
+      return 'compartilhado';
+    } catch (e) {
+      if (e.name === 'AbortError') return 'cancelado';
+    }
+  }
+  if (await salvarPelaPagina(blob, nome)) return 'salvo';
+  baixarArquivo(blob, nome, tipo);
+  return 'baixado';
+}
+
+
+// ===================== js/nuvem.js =====================
+
+/**
+ * Sincronização da equipe (opcional).
+ *
+ * O aplicativo continua sendo "offline-first": tudo é gravado primeiro no
+ * aparelho. Esta camada apenas empurra o que mudou para a nuvem e traz o que os
+ * outros agentes registraram, quando houver sinal. Sem configuração de servidor,
+ * nada aqui é executado e o aplicativo funciona exatamente como antes.
+ *
+ * Servidor: projeto Supabase do próprio usuário (ver supabase/schema.sql).
+ * Autenticação: código + senha da operação, verificados no banco; as tabelas
+ * não são acessíveis diretamente com a chave pública.
+ */
+
+
+const CHAVE_CFG = 'fte:nuvem';
+const LIMITE_FOTOS_POR_SYNC = 8; // evita travar a sincronização numa conexão ruim
+
+// ------------------------------------------------------------ configuração
+
+/**
+ * Configuração vigente: o que foi digitado neste aparelho tem prioridade;
+ * na falta dele, vale o que estiver publicado em config.js — assim a equipe
+ * abre o endereço e já está pronta para sincronizar, sem digitar nada.
+ */
+function configNuvem() {
+  try {
+    const local = JSON.parse(localStorage.getItem(CHAVE_CFG) || 'null');
+    if (local?.url && local?.chave) return local;
+  } catch {
+    /* configuração local corrompida: cai para a publicada */
+  }
+  if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
+    return { url: CONFIG.SUPABASE_URL.replace(/\/+$/, ''), chave: CONFIG.SUPABASE_ANON_KEY, publicada: true };
+  }
+  return null;
+}
+
+/** Código sugerido para a operação (config publicada ou link recebido). */
+function codigoPadrao() {
+  return localStorage.getItem('fte:opPadrao') || CONFIG.CODIGO_OPERACAO_PADRAO || '';
+}
+
+/**
+ * Configuração por link: o coordenador envia um endereço já com o servidor e o
+ * código da operação, e o agente só digita a senha. A senha nunca vai no link.
+ */
+function aplicarConfigDaURL() {
+  const p = new URLSearchParams(location.search);
+  const srv = p.get('srv');
+  const chave = p.get('key');
+  const op = p.get('op');
+  if (!srv && !chave && !op) return false;
+  if (srv && chave) definirConfigNuvem(srv, chave);
+  if (op) localStorage.setItem('fte:opPadrao', op.trim().toUpperCase());
+  // Limpa a barra de endereços para não deixar a configuração exposta no histórico.
+  history.replaceState(null, '', location.pathname + location.hash);
+  return true;
+}
+
+/** Link de configuração para distribuir à equipe (sem a senha). */
+function linkConfiguracao(codigoOperacao) {
+  const cfg = configNuvem();
+  if (!cfg) return null;
+  const base = `${location.origin}${location.pathname}`;
+  const p = new URLSearchParams({ srv: cfg.url, key: cfg.chave });
+  if (codigoOperacao) p.set('op', codigoOperacao);
+  return `${base}?${p.toString()}`;
+}
+
+function definirConfigNuvem(url, chave) {
+  if (!url || !chave) {
+    localStorage.removeItem(CHAVE_CFG);
+    return null;
+  }
+  const cfg = { url: url.trim().replace(/\/+$/, ''), chave: chave.trim() };
+  localStorage.setItem(CHAVE_CFG, JSON.stringify(cfg));
+  return cfg;
+}
+
+function nuvemConfigurada() {
+  return !!configNuvem();
+}
+
+/** Chamada a uma função do banco (RPC). */
+async function rpc(funcao, params) {
+  const cfg = configNuvem();
+  if (!cfg) throw new Error('Servidor de sincronização não configurado.');
+  let resp;
+  try {
+    resp = await fetch(`${cfg.url}/rest/v1/rpc/${funcao}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: cfg.chave,
+        Authorization: `Bearer ${cfg.chave}`,
+      },
+      body: JSON.stringify(params),
+    });
+  } catch {
+    throw new Error('Sem conexão com o servidor.');
+  }
+  const texto = await resp.text();
+  let corpo = null;
+  try {
+    corpo = texto ? JSON.parse(texto) : null;
+  } catch {
+    corpo = null;
+  }
+  if (!resp.ok) {
+    throw new Error(corpo?.message || corpo?.hint || `Falha na sincronização (HTTP ${resp.status}).`);
+  }
+  return corpo;
+}
+
+// ------------------------------------------------------------------ sala
+
+/** Identidade do veículo na nuvem: a placa; sem placa, um identificador local. */
+function chaveVeiculo(v) {
+  const p = normalizarPlaca(v.placa);
+  return p || `local:${v.id}`;
+}
+
+function fiscParaNuvem(fisc) {
+  const { sala, ...limpo } = fisc; // a senha da operação nunca sobe
+  return limpo;
+}
+
+async function criarSala(fisc, codigo, senha) {
+  await rpc('fisc_criar', { p_codigo: codigo, p_senha: senha, p_dados: fiscParaNuvem(fisc) });
+  fisc.sala = { codigo: codigo.trim().toUpperCase(), senha, ultimoSync: null, removidos: [] };
+  await salvarFiscalizacao(fisc);
+  return fisc;
+}
+
+/**
+ * Entra numa operação já existente. Se `fiscLocal` for informada, ela é vinculada
+ * à sala; caso contrário é criada uma fiscalização local a partir da nuvem.
+ */
+async function entrarSala(fiscLocal, codigo, senha) {
+  const r = await rpc('fisc_entrar', { p_codigo: codigo, p_senha: senha });
+  let fisc = fiscLocal;
+  if (!fisc) {
+    fisc = novaFiscalizacao({ ...r.fiscalizacao, id: uid('fisc') });
+  } else if (r.fiscalizacao) {
+    Object.assign(fisc, r.fiscalizacao, { id: fisc.id });
+  }
+  fisc.sala = { codigo: String(r.codigo), senha, ultimoSync: null, removidos: [] };
+  await salvarFiscalizacao(fisc);
+  return fisc;
+}
+
+async function sairSala(fisc) {
+  delete fisc.sala;
+  await salvarFiscalizacao(fisc);
+  return fisc;
+}
+
+/** Registra a exclusão para que ela alcance os demais aparelhos. */
+async function marcarRemocao(fisc, veiculo) {
+  if (!fisc?.sala) return;
+  fisc.sala.removidos = fisc.sala.removidos || [];
+  const chave = chaveVeiculo(veiculo);
+  if (!fisc.sala.removidos.includes(chave)) fisc.sala.removidos.push(chave);
+  await salvarFiscalizacao(fisc);
+}
+
+// ---------------------------------------------------------- sincronização
+
+let sincronizando = false;
+
+function estaSincronizando() {
+  return sincronizando;
+}
+
+/**
+ * Envia as alterações locais e aplica as alterações vindas dos demais agentes.
+ * @returns {{enviados:number, recebidos:number, apagados:number,
+ *            fotosEnviadas:number, fotosRecebidas:number, fotosPendentes:number}}
+ */
+async function sincronizar(fiscId, { comFotos = true } = {}) {
+  if (sincronizando) throw new Error('Sincronização já em andamento.');
+  let fisc = await obterFiscalizacao(fiscId);
+  if (!fisc?.sala) throw new Error('Esta fiscalização não está vinculada a uma operação em nuvem.');
+  sincronizando = true;
+  try {
+    const { codigo, senha } = fisc.sala;
+    // Dois marcadores, porque são dois relógios diferentes: `ultimoSync` é a hora
+    // do servidor (define o que baixar) e `ultimoEnvio` é a hora deste aparelho
+    // (define o que subir). Misturá-los faria um celular com a hora atrasada
+    // parar de enviar os registros.
+    const desde = fisc.sala.ultimoSync || null;
+    const desdeLocal = fisc.sala.ultimoEnvio || null;
+    const inicioLocal = new Date().toISOString();
+    const locais = await listarVeiculos(fisc.id);
+
+    const paraEnviar = locais
+      .filter((v) => !desdeLocal || (v.atualizadoEm || '') > desdeLocal)
+      .map((v) => ({ chave: chaveVeiculo(v), agente: v.inspetor || '', dados: v }));
+
+    const resposta = await rpc('fisc_sync', {
+      p_codigo: codigo,
+      p_senha: senha,
+      p_fisc: fiscParaNuvem(fisc),
+      p_veiculos: paraEnviar,
+      p_removidos: (fisc.sala.removidos || []).map((chave) => ({ chave })),
+      p_desde: desde,
+    });
+
+    // Cabeçalho da fiscalização — prevalece a versão mais recente.
+    if (resposta.fiscalizacao && (resposta.fiscalizacao.atualizadoEm || '') > (fisc.atualizadoEm || '')) {
+      const sala = fisc.sala;
+      Object.assign(fisc, resposta.fiscalizacao, { id: fisc.id, sala });
+    }
+
+    // Exclusões feitas por outros aparelhos.
+    let apagados = 0;
+    const porChave = new Map(locais.map((v) => [chaveVeiculo(v), v]));
+    for (const chave of resposta.removidos || []) {
+      const alvo = porChave.get(chave);
+      if (alvo) {
+        await excluirVeiculo(alvo.id);
+        porChave.delete(chave);
+        apagados += 1;
+      }
+    }
+
+    // Veículos vindos da nuvem.
+    let recebidos = 0;
+    let ordem = await proximaOrdem(fisc.id);
+    for (const remoto of resposta.veiculos || []) {
+      const dados = remoto.dados;
+      const local = porChave.get(remoto.chave);
+      if (local) {
+        if ((dados.atualizadoEm || '') > (local.atualizadoEm || '')) {
+          await put('veiculos', { ...dados, id: local.id, fiscalizacaoId: fisc.id, ordem: local.ordem });
+          recebidos += 1;
+        }
+      } else {
+        const novo = { ...dados, id: uid('veic'), fiscalizacaoId: fisc.id, ordem: ordem++ };
+        await put('veiculos', novo);
+        porChave.set(remoto.chave, novo);
+        recebidos += 1;
+      }
+    }
+
+    let fotosEnviadas = 0;
+    let fotosRecebidas = 0;
+    let fotosPendentes = 0;
+    if (comFotos) {
+      const r = await sincronizarFotos(fisc, porChave, resposta.fotos || []);
+      fotosEnviadas = r.enviadas;
+      fotosRecebidas = r.recebidas;
+      fotosPendentes = r.pendentes;
+    } else {
+      fotosPendentes = (await fotosDaFiscalizacao(fisc.id)).filter((f) => !f.sincronizada).length;
+    }
+
+    fisc = await obterFiscalizacao(fisc.id); // recarrega após as gravações acima
+    fisc.sala = {
+      ...fisc.sala,
+      codigo,
+      senha,
+      ultimoSync: resposta.servidorEm,
+      ultimoEnvio: inicioLocal,
+      removidos: [],
+    };
+    await salvarFiscalizacao(fisc);
+
+    return {
+      enviados: paraEnviar.length,
+      recebidos,
+      apagados,
+      fotosEnviadas,
+      fotosRecebidas,
+      fotosPendentes,
+    };
+  } finally {
+    sincronizando = false;
+  }
+}
+
+async function sincronizarFotos(fisc, porChave, metadadosRemotos) {
+  const { codigo, senha } = fisc.sala;
+  const locais = await fotosDaFiscalizacao(fisc.id);
+  const origensLocais = new Set(locais.map((f) => f.origemId || f.id));
+
+  // Envio (limitado por rodada, para não estourar conexões ruins).
+  const pendentes = locais.filter((f) => !f.sincronizada);
+  let enviadas = 0;
+  const veiculoPorId = new Map([...porChave.values()].map((v) => [v.id, v]));
+  for (const f of pendentes.slice(0, LIMITE_FOTOS_POR_SYNC)) {
+    const veiculo = veiculoPorId.get(f.veiculoId);
+    if (!veiculo) continue;
+    const dataURL = await blobParaDataURL(f.blob);
+    await rpc('fisc_foto_enviar', {
+      p_codigo: codigo,
+      p_senha: senha,
+      p_veiculo_chave: chaveVeiculo(veiculo),
+      p_origem_id: f.origemId || f.id,
+      p_legenda: f.legenda || '',
+      p_agente: veiculo.inspetor || '',
+      p_imagem: dataURL.split(',')[1],
+    });
+    f.sincronizada = true;
+    await put('fotos', f);
+    enviadas += 1;
+  }
+
+  // Recebimento das fotos dos demais agentes.
+  let recebidas = 0;
+  const novas = metadadosRemotos.filter((m) => !origensLocais.has(m.origemId));
+  for (const meta of novas.slice(0, LIMITE_FOTOS_POR_SYNC)) {
+    const veiculo = porChave.get(meta.veiculoChave);
+    if (!veiculo) continue;
+    const completa = await rpc('fisc_foto_baixar', { p_codigo: codigo, p_senha: senha, p_id: meta.id });
+    if (!completa?.imagem) continue;
+    await put('fotos', {
+      id: uid('foto'),
+      origemId: completa.origemId,
+      veiculoId: veiculo.id,
+      fiscalizacaoId: fisc.id,
+      itemId: null,
+      legenda: completa.legenda || '',
+      criadoEm: completa.criadoEm || new Date().toISOString(),
+      sincronizada: true,
+      blob: await dataURLParaBlob(`data:image/jpeg;base64,${completa.imagem}`),
+    });
+    recebidas += 1;
+  }
+
+  const restantes =
+    pendentes.length - enviadas + Math.max(0, novas.length - recebidas);
+  return { enviadas, recebidas, pendentes: restantes };
+}
+
+/** Produção consolidada por agente (painel do coordenador). */
+async function painel(fisc) {
+  if (!fisc?.sala) throw new Error('Fiscalização sem operação em nuvem.');
+  return rpc('fisc_painel', { p_codigo: fisc.sala.codigo, p_senha: fisc.sala.senha });
+}
+
+/** Quantidade de registros ainda não enviados (mostrado na barra superior). */
+async function pendencias(fisc) {
+  if (!fisc?.sala) return null;
+  const desde = fisc.sala.ultimoEnvio;
+  const veiculos = await listarVeiculos(fisc.id);
+  const fotos = await fotosDaFiscalizacao(fisc.id);
+  return {
+    veiculos: veiculos.filter((v) => !desde || (v.atualizadoEm || '') > desde).length,
+    fotos: fotos.filter((f) => !f.sincronizada).length,
+  };
+}
+
+
+// namespaces equivalentes aos "import * as"
+const fotosApi = { comprimir, salvarFotos, fotosDoVeiculo, fotosDaFiscalizacao, excluirFoto, atualizarFoto, blobParaDataURL, dataURLParaBlob };
+const store = { novaFiscalizacao, salvarFiscalizacao, listarFiscalizacoes, obterFiscalizacao, excluirFiscalizacao, idFiscalizacaoAtual, definirFiscalizacaoAtual, inspetorAtual, definirInspetor, novoVeiculo, salvarVeiculo, obterVeiculo, listarVeiculos, excluirVeiculo, proximaOrdem, renumerar, normalizarPlaca, placaValida, formatarPlaca, irregularidades, contarIrregularidades, itensVerificados, frasesIrregularidades, consolidar, mesclarVeiculos };
+const backup = { exportar, importar, baixarArquivo, compartilharOuBaixar };
+const nuvem = { configNuvem, codigoPadrao, aplicarConfigDaURL, linkConfiguracao, definirConfigNuvem, nuvemConfigurada, rpc, chaveVeiculo, criarSala, entrarSala, sairSala, marcarRemocao, estaSincronizando, sincronizar, painel, pendencias };
+
+
+// ===================== js/app.js =====================
+
+/**
+ * Aplicativo de Fiscalização do Transporte Escolar — interface.
+ *
+ * Funciona inteiramente no aparelho (offline). Navegação por hash:
+ *   #/            início
+ *   #/dados-fisc  dados da fiscalização
+ *   #/veiculos    lista de veículos
+ *   #/veiculo/ID  ficha do veículo
+ *   #/relatorio   relatório final
+ *   #/equipe      sincronização da equipe e backup em arquivo
+ */
+
+
+const app = document.getElementById('app');
+const areaImpressao = document.getElementById('area-impressao');
+const btnStatusNuvem = document.getElementById('status-nuvem');
+
+let fisc = null; // fiscalização atual
+let urlsTemporarias = [];
+
+// ------------------------------------------------------------------ utilidades
+
+function toast(msg, tipo = 'ok') {
+  const t = document.createElement('div');
+  t.className = `toast toast--${tipo}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('visivel'));
+  setTimeout(() => {
+    t.classList.remove('visivel');
+    setTimeout(() => t.remove(), 300);
+  }, 3200);
+}
+
+function liberarURLs() {
+  urlsTemporarias.forEach((u) => URL.revokeObjectURL(u));
+  urlsTemporarias = [];
+}
+
+function objURL(blob) {
+  const u = URL.createObjectURL(blob);
+  urlsTemporarias.push(u);
+  return u;
+}
+
+function ir(rota) {
+  location.hash = rota;
+}
+
+function campo(label, id, valor, opts = {}) {
+  const { tipo = 'text', placeholder = '', inputmode = '', maxlength = '', ajuda = '' } = opts;
+  return `
+    <label class="campo">
+      <span>${esc(label)}</span>
+      <input id="${id}" type="${tipo}" value="${esc(valor ?? '')}"
+        placeholder="${esc(placeholder)}" ${inputmode ? `inputmode="${inputmode}"` : ''}
+        ${maxlength ? `maxlength="${maxlength}"` : ''} autocomplete="off">
+      ${ajuda ? `<small>${esc(ajuda)}</small>` : ''}
+    </label>`;
+}
+
+function area(label, id, valor, linhas = 3) {
+  return `
+    <label class="campo">
+      <span>${esc(label)}</span>
+      <textarea id="${id}" rows="${linhas}">${esc(valor ?? '')}</textarea>
+    </label>`;
+}
+
+function select(label, id, valor, opcoes) {
+  return `
+    <label class="campo">
+      <span>${esc(label)}</span>
+      <select id="${id}">
+        ${opcoes.map((o) => `<option value="${esc(o)}" ${o === valor ? 'selected' : ''}>${esc(o)}</option>`).join('')}
+      </select>
+    </label>`;
+}
+
+// --------------------------------------------------------------------- início
+
+async function viewInicio() {
+  const fiscalizacoes = await store.listarFiscalizacoes();
+  if (!fisc) {
+    app.innerHTML = `
+      <section class="cartao destaque">
+        <h2>Bem-vindo</h2>
+        <p>Nenhuma fiscalização ativa. Crie uma nova para começar a registrar os veículos.</p>
+        <button class="btn primario" id="nova">➕ Nova fiscalização</button>
+      </section>
+      ${listaFiscalizacoesHTML(fiscalizacoes)}`;
+    document.getElementById('nova').onclick = criarFiscalizacao;
+    ligarListaFiscalizacoes();
+    return;
+  }
+
+  const veiculos = await store.listarVeiculos(fisc.id);
+  const stats = store.consolidar(veiculos);
+  const espaco = await uso();
+
+  app.innerHTML = `
+    <section class="cartao destaque">
+      <div class="etiqueta">Fiscalização em andamento</div>
+      <h2>Nº ${esc(fisc.numero)}/${esc(fisc.ano)} — ${esc(fisc.municipio || 'município não informado')}</h2>
+      <p class="sub">${esc(dataCurta(fisc.data))} às ${esc(fisc.hora)}${fisc.local ? ` — ${esc(fisc.local)}` : ''}</p>
+      <div class="painel-numeros">
+        <div><b>${stats.totalVeiculos}</b><span>veículos</span></div>
+        <div class="alerta"><b>${stats.irregulares}</b><span>com irregularidade</span></div>
+        <div><b>${stats.totalIrregularidades}</b><span>irregularidades</span></div>
+        <div><b>${stats.autuados}</b><span>autuados</span></div>
+      </div>
+      <div class="acoes">
+        <button class="btn primario grande" id="novo-veic">📷 Fiscalizar veículo</button>
+        <button class="btn" id="ver-veic">🚐 Ver veículos</button>
+        <button class="btn" id="ver-rel">📄 Relatório</button>
+      </div>
+    </section>
+
+    <section class="cartao">
+      <h3>Identificação do agente</h3>
+      ${campo('Seu nome / posto (vai no registro de cada veículo)', 'inspetor', store.inspetorAtual(), {
+        placeholder: 'Ex.: Sd PM Silva',
+      })}
+    </section>
+
+    ${
+      stats.ranking.length
+        ? `<section class="cartao">
+             <h3>Irregularidades mais frequentes</h3>
+             <ol class="ranking-lista">
+               ${stats.ranking
+                 .slice(0, 6)
+                 .map(
+                   (r) => `<li><span>${esc(r.item.titulo)}</span><b>${r.qtd}</b></li>`
+                 )
+                 .join('')}
+             </ol>
+           </section>`
+        : ''
+    }
+
+    ${listaFiscalizacoesHTML(fiscalizacoes)}
+
+    ${
+      espaco
+        ? `<p class="rodape-info">Armazenamento usado: ${(espaco.usage / 1048576).toFixed(1)} MB${
+            espaco.quota ? ` de ${(espaco.quota / 1048576).toFixed(0)} MB disponíveis` : ''
+          }.</p>`
+        : ''
+    }`;
+
+  document.getElementById('novo-veic').onclick = criarVeiculo;
+  document.getElementById('ver-veic').onclick = () => ir('#/veiculos');
+  document.getElementById('ver-rel').onclick = () => ir('#/relatorio');
+  document.getElementById('inspetor').oninput = (e) => store.definirInspetor(e.target.value);
+  ligarListaFiscalizacoes();
+}
+
+function listaFiscalizacoesHTML(lista) {
+  return `
+    <section class="cartao">
+      <div class="cartao-topo">
+        <h3>Fiscalizações no aparelho</h3>
+        <button class="btn pequeno" id="nova-2">➕ Nova</button>
+      </div>
+      ${
+        lista.length
+          ? `<ul class="lista">
+               ${lista
+                 .map(
+                   (f) => `<li class="item-lista ${f.id === fisc?.id ? 'ativo' : ''}">
+                     <button class="link-item" data-abrir="${f.id}">
+                       <b>Nº ${esc(f.numero)}/${esc(f.ano)} — ${esc(f.municipio || '—')}</b>
+                       <small>${esc(dataCurta(f.data))}${f.id === fisc?.id ? ' • ativa' : ''}</small>
+                     </button>
+                     <button class="btn icone perigo" data-excluir-fisc="${f.id}" aria-label="Excluir">🗑</button>
+                   </li>`
+                 )
+                 .join('')}
+             </ul>`
+          : '<p class="vazio">Nenhuma fiscalização registrada.</p>'
+      }
+    </section>`;
+}
+
+function ligarListaFiscalizacoes() {
+  document.getElementById('nova-2')?.addEventListener('click', criarFiscalizacao);
+  app.querySelectorAll('[data-abrir]').forEach((b) => {
+    b.onclick = async () => {
+      store.definirFiscalizacaoAtual(b.dataset.abrir);
+      fisc = await store.obterFiscalizacao(b.dataset.abrir);
+      render();
+      toast('Fiscalização selecionada.');
+    };
+  });
+  app.querySelectorAll('[data-excluir-fisc]').forEach((b) => {
+    b.onclick = async () => {
+      const alvo = await store.obterFiscalizacao(b.dataset.excluirFisc);
+      if (!confirm(`Excluir a fiscalização nº ${alvo.numero}/${alvo.ano} e TODOS os veículos e fotos vinculados? Esta ação não pode ser desfeita.`)) return;
+      await store.excluirFiscalizacao(alvo.id);
+      if (fisc?.id === alvo.id) fisc = null;
+      render();
+      toast('Fiscalização excluída.', 'aviso');
+    };
+  });
+}
+
+async function criarFiscalizacao() {
+  const f = store.novaFiscalizacao({ promotor: fisc?.promotor || '', municipio: fisc?.municipio || '' });
+  const lista = await store.listarFiscalizacoes();
+  const doAno = lista.filter((x) => x.ano === f.ano).length;
+  f.numero = String(doAno + 1).padStart(2, '0');
+  await store.salvarFiscalizacao(f);
+  store.definirFiscalizacaoAtual(f.id);
+  fisc = f;
+  ir('#/dados-fisc');
+  toast('Fiscalização criada. Preencha os dados.');
+}
+
+// ------------------------------------------------------- dados da fiscalização
+
+function viewDadosFiscalizacao() {
+  if (!fisc) return semFiscalizacao();
+  app.innerHTML = `
+    <section class="cartao">
+      <h2>Dados da fiscalização</h2>
+      <div class="grade-2">
+        ${campo('Nº do relatório', 'f_numero', fisc.numero, { inputmode: 'numeric', maxlength: 4 })}
+        ${campo('Ano', 'f_ano', fisc.ano, { inputmode: 'numeric', maxlength: 4 })}
+        ${campo('Data', 'f_data', fisc.data, { tipo: 'date' })}
+        ${campo('Horário', 'f_hora', fisc.hora, { tipo: 'time' })}
+      </div>
+      ${campo('Município', 'f_municipio', fisc.municipio, { placeholder: 'Ex.: Prado' })}
+      ${campo('Local / ponto de fiscalização', 'f_local', fisc.local, { placeholder: 'Ex.: BR-489, entrada da sede' })}
+      ${campo('Órgão', 'f_orgaoMp', fisc.orgaoMp)}
+      ${campo('Promotoria', 'f_promotoria', fisc.promotoria)}
+      ${campo('Promotor(a) de Justiça', 'f_promotor', fisc.promotor, { placeholder: 'Nome que assina o relatório' })}
+      ${campo('Apoio operacional', 'f_apoio', fisc.apoio)}
+      ${area('Equipe (nomes/postos)', 'f_equipe', fisc.equipe, 2)}
+      ${area('Conclusão e providências (texto livre do relatório)', 'f_conclusao', fisc.conclusao, 6)}
+      <button class="btn" id="sugerir-conclusao">✨ Inserir modelo de conclusão</button>
+    </section>`;
+
+  const liga = (id, chave) => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', async () => {
+      fisc[chave] = el.value;
+      await store.salvarFiscalizacao(fisc);
+      atualizarBarraTopo();
+    });
+  };
+  [
+    ['f_numero', 'numero'], ['f_ano', 'ano'], ['f_data', 'data'], ['f_hora', 'hora'],
+    ['f_municipio', 'municipio'], ['f_local', 'local'], ['f_orgaoMp', 'orgaoMp'],
+    ['f_promotoria', 'promotoria'], ['f_promotor', 'promotor'], ['f_apoio', 'apoio'],
+    ['f_equipe', 'equipe'], ['f_conclusao', 'conclusao'],
+  ].forEach(([id, chave]) => liga(id, chave));
+
+  document.getElementById('sugerir-conclusao').onclick = async () => {
+    const veiculos = await store.listarVeiculos(fisc.id);
+    const s = store.consolidar(veiculos);
+    const topo = s.ranking.slice(0, 5).map((r) => `${r.item.titulo.toLowerCase()} (${r.qtd})`).join('; ');
+    const texto = `Dos ${s.totalVeiculos} veículos fiscalizados, ${s.irregulares} apresentaram irregularidades, totalizando ${s.totalIrregularidades} constatações. As ocorrências de maior incidência foram: ${topo || 'não houve'}.
+
+As irregularidades constatadas revelam risco concreto à incolumidade física dos estudantes transportados, em afronta aos arts. 136 a 139 do Código de Trânsito Brasileiro e ao dever de proteção integral previsto no art. 227 da Constituição Federal e no art. 4º do Estatuto da Criança e do Adolescente.
+
+Diante disso, sugere-se: (a) expedição de recomendação ao Município para que se abstenha de utilizar, no transporte escolar, veículos e condutores em situação irregular, promovendo o recadastramento e a vistoria de toda a frota; (b) notificação dos permissionários para regularização em prazo determinado, com comprovação documental; (c) comunicação ao órgão executivo de trânsito para as providências de sua alçada; e (d) realização de nova fiscalização para verificação do cumprimento das medidas.`;
+    fisc.conclusao = fisc.conclusao ? `${fisc.conclusao}\n\n${texto}` : texto;
+    await store.salvarFiscalizacao(fisc);
+    render();
+  };
+}
+
+// ------------------------------------------------------------------- veículos
+
+async function viewVeiculos() {
+  if (!fisc) return semFiscalizacao();
+  const veiculos = await store.listarVeiculos(fisc.id);
+  const fotos = await fotosApi.fotosDaFiscalizacao(fisc.id);
+  const qtdFotos = new Map();
+  fotos.forEach((f) => qtdFotos.set(f.veiculoId, (qtdFotos.get(f.veiculoId) || 0) + 1));
+
+  app.innerHTML = `
+    <section class="cartao">
+      <div class="cartao-topo">
+        <h2>Veículos (${veiculos.length})</h2>
+        <button class="btn primario pequeno" id="novo">➕ Novo</button>
+      </div>
+      <input class="busca" id="busca" type="search" placeholder="Buscar por placa, condutor, rota…">
+      <ul class="lista" id="lista-veiculos">
+        ${
+          veiculos.length
+            ? veiculos.map((v) => itemVeiculoHTML(v, qtdFotos.get(v.id) || 0)).join('')
+            : '<li class="vazio">Nenhum veículo registrado. Toque em “Novo” para começar.</li>'
+        }
+      </ul>
+    </section>`;
+
+  document.getElementById('novo').onclick = criarVeiculo;
+  app.querySelectorAll('[data-veic]').forEach((b) => {
+    b.onclick = () => ir(`#/veiculo/${b.dataset.veic}`);
+  });
+  document.getElementById('busca').oninput = (e) => {
+    const termo = e.target.value.toLowerCase();
+    app.querySelectorAll('#lista-veiculos .item-lista').forEach((li) => {
+      li.style.display = li.dataset.busca.includes(termo) ? '' : 'none';
+    });
+  };
+}
+
+function itemVeiculoHTML(v, nFotos) {
+  const irr = store.contarIrregularidades(v);
+  const verificados = store.itensVerificados(v);
+  const busca = [v.placa, v.condutorNome, v.escolaRota, v.permissionario, v.marcaModelo]
+    .filter(Boolean).join(' ').toLowerCase();
+  const alerta = !store.placaValida(v.placa) || !nFotos;
+  return `
+    <li class="item-lista" data-busca="${esc(busca)}">
+      <button class="link-item" data-veic="${v.id}">
+        <b>${String(v.ordem).padStart(2, '0')}. ${esc(store.formatarPlaca(v.placa) || 'SEM PLACA')}</b>
+        <small>${esc(v.tipo)}${v.condutorNome ? ` • ${esc(v.condutorNome)}` : ''} • ${verificados} itens verificados</small>
+      </button>
+      <div class="selos">
+        ${irr ? `<span class="selo perigo">${irr} irreg.</span>` : '<span class="selo ok">regular</span>'}
+        <span class="selo ${nFotos ? '' : 'aviso'}">📷 ${nFotos}</span>
+        ${alerta ? '<span class="selo aviso" title="Placa inválida ou sem foto">!</span>' : ''}
+      </div>
+    </li>`;
+}
+
+async function criarVeiculo() {
+  if (!fisc) return semFiscalizacao();
+  const ordem = await store.proximaOrdem(fisc.id);
+  const v = store.novoVeiculo(fisc.id, ordem);
+  await store.salvarVeiculo(v);
+  ir(`#/veiculo/${v.id}`);
+}
+
+// -------------------------------------------------------------- ficha veículo
+
+async function viewVeiculo(id) {
+  const v = await store.obterVeiculo(id);
+  if (!v) {
+    app.innerHTML = '<section class="cartao"><p class="vazio">Veículo não encontrado.</p></section>';
+    return;
+  }
+  const fotos = await fotosApi.fotosDoVeiculo(id);
+
+  app.innerHTML = `
+    <section class="cartao">
+      <div class="cartao-topo">
+        <h2>Veículo ${String(v.ordem).padStart(2, '0')}</h2>
+        <button class="btn icone perigo" id="excluir" aria-label="Excluir veículo">🗑</button>
+      </div>
+      <label class="campo placa-campo">
+        <span>Placa *</span>
+        <input id="v_placa" type="text" value="${esc(store.formatarPlaca(v.placa))}"
+          placeholder="ABC1D23" autocapitalize="characters" autocomplete="off" maxlength="8">
+        <small id="placa-aviso"></small>
+      </label>
+      <div class="grade-2">
+        ${select('Tipo', 'v_tipo', v.tipo, TIPOS_VEICULO)}
+        ${campo('Marca/modelo', 'v_marcaModelo', v.marcaModelo, { placeholder: 'Ex.: Mercedes Sprinter' })}
+        ${campo('Ano', 'v_ano', v.ano, { inputmode: 'numeric', maxlength: 4 })}
+        ${campo('Cor', 'v_cor', v.cor)}
+        ${campo('Lotação', 'v_lotacao', v.lotacao, { inputmode: 'numeric' })}
+        ${campo('Escolares a bordo', 'v_alunosBordo', v.alunosBordo, { inputmode: 'numeric' })}
+      </div>
+      ${campo('Permissionário / empresa', 'v_permissionario', v.permissionario)}
+      ${campo('Rota / escola atendida', 'v_escolaRota', v.escolaRota)}
+    </section>
+
+    <section class="cartao">
+      <h3>Registro fotográfico</h3>
+      <p class="ajuda">Registre, no mínimo: a placa, a lateral com a faixa ESCOLAR, o interior (cintos) e cada irregularidade constatada.</p>
+      <div class="acoes">
+        <label class="btn primario arquivo">📷 Tirar foto
+          <input type="file" accept="image/*" capture="environment" multiple hidden id="cam">
+        </label>
+        <label class="btn arquivo">🖼 Da galeria
+          <input type="file" accept="image/*" multiple hidden id="gal">
+        </label>
+      </div>
+      <div class="grade-fotos" id="grade-fotos">
+        ${fotos.map((f) => fotoHTML(f)).join('') || '<p class="vazio">Nenhuma foto.</p>'}
+      </div>
+    </section>
+
+    <section class="cartao">
+      <h3>Condutor</h3>
+      ${campo('Nome', 'v_condutorNome', v.condutorNome)}
+      <div class="grade-2">
+        ${campo('CPF', 'v_condutorCpf', v.condutorCpf, { inputmode: 'numeric' })}
+        ${campo('Telefone', 'v_condutorTelefone', v.condutorTelefone, { inputmode: 'tel' })}
+        ${campo('Nº da CNH', 'v_condutorCnh', v.condutorCnh, { inputmode: 'numeric' })}
+        ${campo('Categoria', 'v_condutorCategoria', v.condutorCategoria, { placeholder: 'D, E…' })}
+        ${campo('Validade da CNH', 'v_condutorValidadeCnh', v.condutorValidadeCnh, { tipo: 'date' })}
+      </div>
+      <label class="campo linha-check">
+        <input type="checkbox" id="v_monitorPossui" ${v.monitorPossui ? 'checked' : ''}>
+        <span>Monitor/acompanhante presente</span>
+      </label>
+      ${campo('Nome do monitor', 'v_monitorNome', v.monitorNome)}
+    </section>
+
+    <section class="cartao">
+      <div class="cartao-topo">
+        <h3>Checklist</h3>
+        <button class="btn pequeno" id="tudo-conforme">✓ Tudo conforme</button>
+      </div>
+      <p class="ajuda">Marque <b>IRREG.</b> apenas no que estiver em desacordo — o texto do relatório é montado automaticamente.</p>
+      ${GRUPOS.map((g) => grupoHTML(g, v)).join('')}
+    </section>
+
+    <section class="cartao">
+      <h3>Encerramento</h3>
+      ${area('Outras observações (entram no relatório)', 'v_obsGerais', v.obsGerais, 3)}
+      <label class="campo linha-check">
+        <input type="checkbox" id="v_autuado" ${v.autuado ? 'checked' : ''}>
+        <span>Auto de infração lavrado</span>
+      </label>
+      ${campo('Nº do auto de infração', 'v_autuacaoNumero', v.autuacaoNumero)}
+      ${select('Medida adotada', 'v_medida', v.medida, MEDIDAS)}
+      ${campo('Agente responsável', 'v_inspetor', v.inspetor)}
+      <div class="acoes">
+        <button class="btn" id="geo">📍 Registrar coordenadas</button>
+        <span class="ajuda" id="geo-txt">${v.geo ? `${v.geo.lat.toFixed(5)}, ${v.geo.lng.toFixed(5)}` : 'sem coordenadas'}</span>
+      </div>
+      <div class="resumo-irr" id="resumo-irr"></div>
+      <div class="acoes">
+        <button class="btn primario grande" id="concluir">✔ Concluir e voltar</button>
+        <button class="btn grande" id="proximo">➕ Salvar e próximo veículo</button>
+      </div>
+    </section>`;
+
+  ligarFichaVeiculo(v);
+  atualizarResumoIrr(v);
+}
+
+function grupoHTML(grupo, v) {
+  const itens = ITENS.filter((i) => i.grupo === grupo.id);
+  const pendentes = itens.filter((i) => !v.itens?.[i.id]?.status).length;
+  const irr = itens.filter((i) => v.itens?.[i.id]?.status === 'irregular').length;
+  return `
+    <details class="grupo" ${irr ? 'open' : ''}>
+      <summary>
+        <span>${grupo.icone} ${esc(grupo.titulo)}</span>
+        <span class="selos">
+          ${irr ? `<span class="selo perigo">${irr}</span>` : ''}
+          ${pendentes ? `<span class="selo aviso">${pendentes} pend.</span>` : '<span class="selo ok">ok</span>'}
+        </span>
+      </summary>
+      ${itens.map((i) => itemChecklistHTML(i, v)).join('')}
+    </details>`;
+}
+
+function itemChecklistHTML(item, v) {
+  const estado = v.itens?.[item.id] || {};
+  const st = estado.status || '';
+  return `
+    <div class="item-check" data-item="${item.id}">
+      <div class="item-check-titulo">
+        <b>${esc(item.titulo)}</b>
+        <small>${esc(item.base || '')}${item.gravidade ? ` • ${GRAVIDADE_LABEL[item.gravidade]}` : ''}</small>
+        ${item.ajuda ? `<small class="ajuda">${esc(item.ajuda)}</small>` : ''}
+      </div>
+      <div class="opcoes" role="group">
+        <button type="button" class="op ok ${st === 'conforme' ? 'sel' : ''}" data-st="conforme">✓ Conforme</button>
+        <button type="button" class="op perigo ${st === 'irregular' ? 'sel' : ''}" data-st="irregular">✗ Irreg.</button>
+        <button type="button" class="op ${st === 'na' ? 'sel' : ''}" data-st="na">N/A</button>
+      </div>
+      <input class="obs-item ${st === 'irregular' ? '' : 'oculto'}" type="text"
+        placeholder="Detalhe (opcional): ex. lâmpada traseira esquerda queimada"
+        value="${esc(estado.obs || '')}">
+    </div>`;
+}
+
+function fotoHTML(f) {
+  return `
+    <figure class="foto" data-foto="${f.id}">
+      <img src="${objURL(f.blob)}" alt="Foto do veículo" loading="lazy">
+      <input class="legenda" type="text" placeholder="Legenda" value="${esc(f.legenda || '')}">
+      <button class="btn icone perigo apagar" aria-label="Excluir foto">🗑</button>
+    </figure>`;
+}
+
+function ligarFichaVeiculo(v) {
+  // Gravação atrasada para não escrever no banco a cada tecla; `salvarAgora`
+  // é obrigatório antes de qualquer redesenho da tela, sob pena de a leitura
+  // seguinte trazer uma versão desatualizada do veículo.
+  const salvarAgora = () => store.salvarVeiculo(v);
+  const salvar = debounce(salvarAgora, 300);
+
+  const texto = (id, chave, transform = (x) => x) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      v[chave] = transform(el.value);
+      salvar();
+    });
+  };
+  texto('v_marcaModelo', 'marcaModelo');
+  texto('v_ano', 'ano');
+  texto('v_cor', 'cor');
+  texto('v_lotacao', 'lotacao');
+  texto('v_alunosBordo', 'alunosBordo');
+  texto('v_permissionario', 'permissionario');
+  texto('v_escolaRota', 'escolaRota');
+  texto('v_condutorNome', 'condutorNome');
+  texto('v_condutorCpf', 'condutorCpf');
+  texto('v_condutorTelefone', 'condutorTelefone');
+  texto('v_condutorCnh', 'condutorCnh');
+  texto('v_condutorCategoria', 'condutorCategoria', (x) => x.toUpperCase());
+  texto('v_condutorValidadeCnh', 'condutorValidadeCnh');
+  texto('v_monitorNome', 'monitorNome');
+  texto('v_obsGerais', 'obsGerais');
+  texto('v_autuacaoNumero', 'autuacaoNumero');
+  texto('v_inspetor', 'inspetor');
+  document.getElementById('v_tipo').onchange = (e) => { v.tipo = e.target.value; salvar(); };
+  document.getElementById('v_medida').onchange = (e) => { v.medida = e.target.value; salvar(); };
+  document.getElementById('v_monitorPossui').onchange = (e) => {
+    v.monitorPossui = e.target.checked;
+    if (e.target.checked) marcarItem(v, 'monitor', 'conforme');
+    salvar();
+  };
+  document.getElementById('v_autuado').onchange = (e) => { v.autuado = e.target.checked; salvar(); };
+
+  // placa com validação e alerta de duplicidade
+  const placaEl = document.getElementById('v_placa');
+  const avisoEl = document.getElementById('placa-aviso');
+  const validarPlaca = async () => {
+    const bruta = placaEl.value;
+    v.placa = store.normalizarPlaca(bruta);
+    salvar();
+    if (!v.placa) {
+      avisoEl.textContent = 'Informe a placa do veículo.';
+      avisoEl.className = 'aviso-txt';
+      return;
+    }
+    if (!store.placaValida(v.placa)) {
+      avisoEl.textContent = 'Formato inválido (use ABC1234 ou ABC1D23).';
+      avisoEl.className = 'aviso-txt erro';
+      return;
+    }
+    const outros = (await store.listarVeiculos(v.fiscalizacaoId)).filter(
+      (o) => o.id !== v.id && o.placa === v.placa
+    );
+    if (outros.length) {
+      avisoEl.textContent = `Atenção: placa já registrada no veículo ${String(outros[0].ordem).padStart(2, '0')}.`;
+      avisoEl.className = 'aviso-txt erro';
+    } else {
+      avisoEl.textContent = 'Placa válida.';
+      avisoEl.className = 'aviso-txt ok';
+    }
+  };
+  placaEl.addEventListener('input', () => {
+    const p = store.normalizarPlaca(placaEl.value);
+    placaEl.value = store.formatarPlaca(p);
+    validarPlaca();
+  });
+  validarPlaca();
+
+  // checklist
+  app.querySelectorAll('.item-check').forEach((div) => {
+    const itemId = div.dataset.item;
+    div.querySelectorAll('.op').forEach((btn) => {
+      btn.onclick = () => {
+        const novo = btn.classList.contains('sel') ? '' : btn.dataset.st;
+        div.querySelectorAll('.op').forEach((b) => b.classList.remove('sel'));
+        if (novo) btn.classList.add('sel');
+        marcarItem(v, itemId, novo);
+        div.querySelector('.obs-item').classList.toggle('oculto', novo !== 'irregular');
+        salvar();
+        atualizarResumoIrr(v);
+        atualizarSelosGrupos(v);
+      };
+    });
+    div.querySelector('.obs-item').addEventListener('input', (e) => {
+      marcarItem(v, itemId, v.itens[itemId]?.status || 'irregular', e.target.value);
+      salvar();
+      atualizarResumoIrr(v);
+    });
+  });
+
+  document.getElementById('tudo-conforme').onclick = async () => {
+    ITENS.forEach((i) => {
+      if (!v.itens[i.id]?.status) marcarItem(v, i.id, 'conforme');
+    });
+    await salvarAgora();
+    await viewVeiculo(v.id);
+    toast('Itens pendentes marcados como conformes.');
+  };
+
+  // fotos
+  const receber = async (input) => {
+    const arquivos = [...input.files];
+    input.value = '';
+    if (!arquivos.length) return;
+    toast(`Processando ${arquivos.length} foto(s)…`);
+    await fotosApi.salvarFotos(arquivos, { veiculoId: v.id, fiscalizacaoId: v.fiscalizacaoId });
+    await recarregarFotos(v);
+    toast('Foto(s) salva(s).');
+  };
+  document.getElementById('cam').onchange = (e) => receber(e.target);
+  document.getElementById('gal').onchange = (e) => receber(e.target);
+  ligarFotos(v);
+
+  document.getElementById('geo').onclick = () => {
+    if (!navigator.geolocation) return toast('Geolocalização indisponível.', 'aviso');
+    toast('Obtendo coordenadas…');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        v.geo = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
+        salvar();
+        document.getElementById('geo-txt').textContent = `${v.geo.lat.toFixed(5)}, ${v.geo.lng.toFixed(5)} (±${Math.round(v.geo.acc)} m)`;
+      },
+      () => toast('Não foi possível obter a localização.', 'aviso'),
+      { enableHighAccuracy: true, timeout: 12000 }
+    );
+  };
+
+  document.getElementById('excluir').onclick = async () => {
+    if (!confirm('Excluir este veículo e suas fotos?')) return;
+    await nuvem.marcarRemocao(fisc, v); // a exclusão precisa alcançar os demais aparelhos
+    await store.excluirVeiculo(v.id);
+    await store.renumerar(v.fiscalizacaoId);
+    ir('#/veiculos');
+    toast('Veículo excluído.', 'aviso');
+    sincronizarAgora();
+  };
+  document.getElementById('concluir').onclick = async () => {
+    await store.salvarVeiculo(v);
+    ir('#/veiculos');
+    sincronizarAgora();
+  };
+  document.getElementById('proximo').onclick = async () => {
+    await store.salvarVeiculo(v);
+    criarVeiculo();
+    sincronizarAgora();
+  };
+}
+
+function ligarFotos(v) {
+  app.querySelectorAll('.foto').forEach((fig) => {
+    const id = fig.dataset.foto;
+    fig.querySelector('.apagar').onclick = async () => {
+      if (!confirm('Excluir esta foto?')) return;
+      await fotosApi.excluirFoto(id);
+      await recarregarFotos(v);
+    };
+    fig.querySelector('.legenda').addEventListener(
+      'input',
+      debounce(async (e) => {
+        const fotos = await fotosApi.fotosDoVeiculo(v.id);
+        const f = fotos.find((x) => x.id === id);
+        if (f) {
+          f.legenda = e.target.value;
+          await fotosApi.atualizarFoto(f);
+        }
+      }, 400)
+    );
+    fig.querySelector('img').onclick = () => abrirVisualizador(fig.querySelector('img').src);
+  });
+}
+
+async function recarregarFotos(v) {
+  const fotos = await fotosApi.fotosDoVeiculo(v.id);
+  const grade = document.getElementById('grade-fotos');
+  grade.innerHTML = fotos.map((f) => fotoHTML(f)).join('') || '<p class="vazio">Nenhuma foto.</p>';
+  ligarFotos(v);
+}
+
+function abrirVisualizador(src) {
+  const div = document.createElement('div');
+  div.className = 'visualizador';
+  div.innerHTML = `<img src="${src}" alt="Ampliação"><button class="btn">Fechar</button>`;
+  div.onclick = () => div.remove();
+  document.body.appendChild(div);
+}
+
+function marcarItem(v, itemId, status, obs) {
+  v.itens = v.itens || {};
+  const atual = v.itens[itemId] || {};
+  if (!status) {
+    delete v.itens[itemId];
+    return;
+  }
+  v.itens[itemId] = { status, obs: obs !== undefined ? obs : atual.obs || '' };
+}
+
+function atualizarResumoIrr(v) {
+  const el = document.getElementById('resumo-irr');
+  if (!el) return;
+  const irr = store.irregularidades(v);
+  el.innerHTML = irr.length
+    ? `<b>${irr.length} irregularidade(s).</b> Texto que irá ao relatório:<br><i>${esc(store.frasesIrregularidades(v))}</i>`
+    : '<b>Nenhuma irregularidade marcada até o momento.</b>';
+  el.className = `resumo-irr ${irr.length ? 'com-irr' : ''}`;
+}
+
+function atualizarSelosGrupos(v) {
+  app.querySelectorAll('.grupo').forEach((det, idx) => {
+    const grupo = GRUPOS[idx];
+    if (!grupo) return;
+    const itens = ITENS.filter((i) => i.grupo === grupo.id);
+    const pendentes = itens.filter((i) => !v.itens?.[i.id]?.status).length;
+    const irr = itens.filter((i) => v.itens?.[i.id]?.status === 'irregular').length;
+    const selos = det.querySelector('summary .selos');
+    selos.innerHTML = `
+      ${irr ? `<span class="selo perigo">${irr}</span>` : ''}
+      ${pendentes ? `<span class="selo aviso">${pendentes} pend.</span>` : '<span class="selo ok">ok</span>'}`;
+  });
+}
+
+// ------------------------------------------------------------------ relatório
+
+async function viewRelatorio() {
+  if (!fisc) return semFiscalizacao();
+  const veiculos = await store.listarVeiculos(fisc.id);
+  const pendencias = [];
+  const semPlaca = veiculos.filter((v) => !store.placaValida(v.placa));
+  if (semPlaca.length) pendencias.push(`${semPlaca.length} veículo(s) com placa ausente ou inválida.`);
+  const semVerificacao = veiculos.filter((v) => store.itensVerificados(v) === 0);
+  if (semVerificacao.length) pendencias.push(`${semVerificacao.length} veículo(s) sem nenhum item verificado.`);
+  if (!fisc.municipio) pendencias.push('Município não informado nos dados da fiscalização.');
+  if (!fisc.promotor) pendencias.push('Nome do(a) promotor(a) não informado.');
+
+  app.innerHTML = `
+    <section class="cartao">
+      <h2>Relatório final</h2>
+      <p class="sub">Nº ${esc(fisc.numero)}/${esc(fisc.ano)} — ${veiculos.length} veículo(s).</p>
+      ${
+        pendencias.length
+          ? `<div class="alerta-box"><b>Antes de emitir, confira:</b><ul>${pendencias
+              .map((p) => `<li>${esc(p)}</li>`)
+              .join('')}</ul></div>`
+          : '<div class="ok-box">Dados completos para emissão.</div>'
+      }
+      <label class="campo linha-check">
+        <input type="checkbox" id="com-fotos" checked>
+        <span>Incluir anexo fotográfico</span>
+      </label>
+      <div class="acoes">
+        <button class="btn primario grande" id="gerar">👁 Gerar / atualizar</button>
+        <button class="btn grande" id="imprimir">🖨 Imprimir / salvar PDF</button>
+        <button class="btn" id="doc">📝 Baixar .doc (Word)</button>
+        <button class="btn" id="csv">📊 Baixar planilha (CSV)</button>
+      </div>
+    </section>
+    <section class="cartao previa">
+      <h3>Pré-visualização</h3>
+      <div class="documento" id="previa"><p class="vazio">Toque em “Gerar / atualizar”.</p></div>
+    </section>`;
+
+  const comFotos = () => document.getElementById('com-fotos').checked;
+
+  const gerar = async () => {
+    toast('Montando relatório…');
+    const html = await montarRelatorio(fisc, veiculos, { comFotos: comFotos() });
+    document.getElementById('previa').innerHTML = html;
+    return html;
+  };
+
+  document.getElementById('gerar').onclick = gerar;
+
+  document.getElementById('imprimir').onclick = async () => {
+    const html = await gerar();
+    areaImpressao.innerHTML = `<div class="documento">${html}</div>`;
+    document.body.classList.add('imprimindo');
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.body.classList.remove('imprimindo');
+        areaImpressao.innerHTML = '';
+      }, 800);
+    }, 350);
+  };
+
+  document.getElementById('doc').onclick = async () => {
+    const html = await montarRelatorio(fisc, veiculos, { comFotos: comFotos() });
+    const nome = `Relatorio_Fiscalizacao_${fisc.numero}-${fisc.ano}_${(fisc.municipio || 'municipio').replace(/\s+/g, '_')}.doc`;
+    await backup.compartilharOuBaixar(
+      documentoCompleto(html, `Relatório de Fiscalização nº ${fisc.numero}/${fisc.ano}`),
+      nome,
+      'application/msword'
+    );
+  };
+
+  document.getElementById('csv').onclick = async () => {
+    const csv = gerarCSV(fisc, veiculos, ITENS);
+    await backup.compartilharOuBaixar(
+      csv,
+      `Fiscalizacao_${fisc.numero}-${fisc.ano}.csv`,
+      'text/csv;charset=utf-8'
+    );
+  };
+}
+
+// --------------------------------------------------------------------- backup
+
+async function viewEquipe() {
+  const lista = await store.listarFiscalizacoes();
+  app.innerHTML = `
+    <div id="area-nuvem"></div>
+
+    <section class="cartao">
+      <h2>Backup em arquivo</h2>
+      <p class="ajuda">
+        Alternativa para quando não houver sinal em campo: cada agente exporta o arquivo
+        <b>.json</b> e envia ao coordenador. Ao importar, veículos com a mesma placa são
+        consolidados (prevalece a versão mais recente).
+      </p>
+      ${
+        fisc
+          ? `<div class="acoes">
+               <button class="btn primario" id="exp-fotos">⬆ Exportar com fotos</button>
+               <button class="btn" id="exp-sem">⬆ Exportar só dados (leve)</button>
+             </div>`
+          : '<p class="vazio">Selecione uma fiscalização para exportar.</p>'
+      }
+    </section>
+
+    <section class="cartao">
+      <h3>Importar arquivo</h3>
+      <label class="campo">
+        <span>Destino</span>
+        <select id="destino">
+          <option value="">Criar nova fiscalização</option>
+          ${lista
+            .map(
+              (f) => `<option value="${f.id}" ${f.id === fisc?.id ? 'selected' : ''}>Nº ${esc(f.numero)}/${esc(f.ano)} — ${esc(f.municipio || '—')}</option>`
+            )
+            .join('')}
+        </select>
+      </label>
+      <label class="btn primario arquivo">⬇ Selecionar arquivo .json
+        <input type="file" accept="application/json,.json" hidden id="arq">
+      </label>
+      <div id="resultado-import"></div>
+    </section>
+
+    <section class="cartao">
+      <h3>Segurança dos dados</h3>
+      <p class="ajuda">
+        Sem sincronização, os dados ficam apenas neste aparelho e limpar os dados do navegador
+        apaga tudo. Exporte um backup ao final de cada dia de fiscalização, mesmo usando a nuvem.
+      </p>
+    </section>`;
+
+  await renderNuvem();
+
+  document.getElementById('exp-fotos')?.addEventListener('click', () => exportarBackup(true));
+  document.getElementById('exp-sem')?.addEventListener('click', () => exportarBackup(false));
+
+  document.getElementById('arq').onchange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      toast('Importando…');
+      const pacote = JSON.parse(await file.text());
+      const destino = document.getElementById('destino').value || null;
+      const r = await backup.importar(pacote, destino);
+      store.definirFiscalizacaoAtual(r.fiscalizacaoId);
+      fisc = await store.obterFiscalizacao(r.fiscalizacaoId);
+      document.getElementById('resultado-import').innerHTML = `
+        <div class="ok-box">
+          Importação concluída: <b>${r.novos}</b> veículo(s) novo(s), <b>${r.atualizados}</b> atualizado(s),
+          <b>${r.ignorados}</b> mantido(s) sem alteração e <b>${r.fotos}</b> foto(s).
+        </div>`;
+      atualizarBarraTopo();
+      toast('Importação concluída.');
+    } catch (err) {
+      document.getElementById('resultado-import').innerHTML = `<div class="alerta-box">${esc(err.message)}</div>`;
+    }
+  };
+}
+
+async function exportarBackup(comFotos) {
+  toast('Preparando arquivo…');
+  const pacote = await backup.exportar(fisc.id, { comFotos });
+  const nome = `fiscalizacao_${fisc.numero}-${fisc.ano}_${(fisc.municipio || 'municipio').replace(/\s+/g, '_')}${comFotos ? '_com_fotos' : ''}.json`;
+  await backup.compartilharOuBaixar(JSON.stringify(pacote), nome, 'application/json');
+}
+
+// -------------------------------------------------- sincronização da equipe
+
+let forcarFormServidor = false;
+
+async function renderNuvem() {
+  const area = document.getElementById('area-nuvem');
+  if (!area) return;
+  const cfg = nuvem.configNuvem();
+
+  if (!cfg || forcarFormServidor) {
+    area.innerHTML = `
+      <section class="cartao destaque">
+        <h2>Sincronização da equipe</h2>
+        <p class="ajuda">
+          Com o servidor configurado, todos os agentes trabalham na mesma operação: cada aparelho
+          grava offline e envia sozinho assim que houver sinal, e o coordenador acompanha a
+          produção ao vivo. Configure uma vez e informe apenas o <b>código da operação</b> à equipe.
+        </p>
+        <details class="grupo">
+          <summary><span>⚙️ Como obter esses dados</span></summary>
+          <div class="item-check">
+            <ol class="passos">
+              <li>Crie um projeto gratuito em <b>supabase.com</b>.</li>
+              <li>Em <i>SQL Editor → New query</i>, cole o conteúdo de <b>supabase/schema.sql</b> e execute.</li>
+              <li>Em <i>Project Settings → API</i>, copie a <b>Project URL</b> e a chave <b>anon public</b>.</li>
+              <li>Cole os dois campos abaixo. A chave pública sozinha não dá acesso a nada:
+                  é preciso o código e a senha da operação.</li>
+            </ol>
+          </div>
+        </details>
+        ${campo('Endereço do projeto (Project URL)', 'n_url', cfg?.url || '', { placeholder: 'https://xxxx.supabase.co' })}
+        ${campo('Chave pública (anon public)', 'n_chave', cfg?.chave || '', { placeholder: 'eyJhbGciOi...' })}
+        <div class="acoes">
+          <button class="btn primario" id="n_salvar">Salvar configuração</button>
+          ${cfg ? '<button class="btn" id="n_cancelar">Cancelar</button>' : ''}
+        </div>
+      </section>`;
+    document.getElementById('n_cancelar')?.addEventListener('click', () => {
+      forcarFormServidor = false;
+      renderNuvem();
+    });
+    document.getElementById('n_salvar').onclick = () => {
+      const url = document.getElementById('n_url').value.trim();
+      const chave = document.getElementById('n_chave').value.trim();
+      if (!/^https?:\/\//.test(url) || chave.length < 20) {
+        return toast('Verifique o endereço e a chave.', 'aviso');
+      }
+      nuvem.definirConfigNuvem(url, chave);
+      forcarFormServidor = false;
+      toast('Servidor configurado.');
+      renderNuvem();
+      atualizarStatusNuvem();
+    };
+    return;
+  }
+
+  if (!fisc || !fisc.sala) {
+    // Sem fiscalização local o agente ainda pode (e deve) entrar na operação:
+    // a fiscalização é criada automaticamente a partir dos dados da nuvem.
+    area.innerHTML = `
+      <section class="cartao destaque">
+        <h2>Sincronização da equipe</h2>
+        <p class="ajuda">
+          O <b>coordenador</b> cria a operação e passa o código e a senha à equipe.
+          Cada agente entra com esses mesmos dados no seu aparelho.
+        </p>
+        <div class="grade-2">
+          ${campo('Código da operação', 'n_codigo', sugerirCodigo(), { placeholder: 'PRADO2026' })}
+          ${campo('Senha da operação', 'n_senha', '', { placeholder: 'mínimo 4 caracteres' })}
+        </div>
+        <div class="acoes">
+          <button class="btn primario grande" id="n_entrar">🔑 Entrar na operação</button>
+          ${fisc ? '<button class="btn grande" id="n_criar">🆕 Criar operação</button>' : ''}
+        </div>
+        <p class="ajuda">
+          “Entrar” vincula este aparelho a uma operação já criada e traz os dados dos demais agentes.
+          ${fisc ? '“Criar” envia <b>esta</b> fiscalização para a nuvem — use apenas no aparelho do coordenador.' : ''}
+        </p>
+        ${botaoTrocarServidorHTML()}
+      </section>`;
+
+    const ler = () => ({
+      codigo: document.getElementById('n_codigo').value.trim(),
+      senha: document.getElementById('n_senha').value,
+    });
+    document.getElementById('n_criar')?.addEventListener('click', async () => {
+      const { codigo, senha } = ler();
+      try {
+        toast('Criando operação…');
+        await nuvem.criarSala(fisc, codigo, senha);
+        await sincronizarAgora({ silencioso: false });
+        renderNuvem();
+      } catch (e) {
+        toast(e.message, 'aviso');
+      }
+    });
+    document.getElementById('n_entrar').onclick = async () => {
+      const { codigo, senha } = ler();
+      try {
+        toast('Entrando na operação…');
+        const vinculada = await nuvem.entrarSala(fisc || null, codigo, senha);
+        store.definirFiscalizacaoAtual(vinculada.id);
+        fisc = await store.obterFiscalizacao(vinculada.id);
+        await sincronizarAgora({ silencioso: false });
+        atualizarBarraTopo();
+        renderNuvem();
+        toast('Aparelho vinculado à operação.');
+      } catch (e) {
+        toast(e.message, 'aviso');
+      }
+    };
+    ligarTrocaServidor();
+    return;
+  }
+
+  const pend = await nuvem.pendencias(fisc);
+  area.innerHTML = `
+    <section class="cartao destaque">
+      <div class="cartao-topo">
+        <h2>Operação ${esc(fisc.sala.codigo)}</h2>
+        <span class="selo ${pend.veiculos || pend.fotos ? 'aviso' : 'ok'}" id="n_pend">
+          ${pend.veiculos || pend.fotos ? `${pend.veiculos} veíc. / ${pend.fotos} fotos pendentes` : 'tudo sincronizado'}
+        </span>
+      </div>
+      <p class="ajuda">
+        Última sincronização: ${fisc.sala.ultimoSync ? esc(new Date(fisc.sala.ultimoSync).toLocaleString('pt-BR')) : 'ainda não sincronizado'}.
+        ${navigator.onLine ? '' : '<b>Aparelho sem conexão</b> — os registros sobem assim que houver sinal.'}
+      </p>
+      <label class="campo linha-check">
+        <input type="checkbox" id="n_fotos" ${autoFotos() ? 'checked' : ''}>
+        <span>Enviar também as fotos (desmarque se o sinal estiver ruim)</span>
+      </label>
+      <div class="acoes">
+        <button class="btn primario grande" id="n_sync">🔄 Sincronizar agora</button>
+        <button class="btn" id="n_painel">📊 Atualizar painel</button>
+      </div>
+      <div class="acoes">
+        <button class="btn" id="n_link">🔗 Enviar convite à equipe</button>
+        <button class="btn perigo" id="n_sair">Desvincular aparelho</button>
+      </div>
+      <div id="n_resultado"></div>
+    </section>
+
+    <section class="cartao">
+      <h3>Painel da equipe</h3>
+      <div id="n_painel_area"><p class="vazio">Toque em “Atualizar painel”.</p></div>
+    </section>`;
+
+  document.getElementById('n_fotos').onchange = (e) => {
+    localStorage.setItem('fte:autoFotos', e.target.checked ? '1' : '0');
+  };
+  document.getElementById('n_sync').onclick = () => sincronizarAgora({ silencioso: false });
+  document.getElementById('n_sair').onclick = async () => {
+    if (!confirm('Desvincular este aparelho da operação? Os dados já registrados permanecem aqui.')) return;
+    await nuvem.sairSala(fisc);
+    fisc = await store.obterFiscalizacao(fisc.id);
+    renderNuvem();
+    atualizarStatusNuvem();
+  };
+  document.getElementById('n_painel').onclick = carregarPainel;
+  document.getElementById('n_link').onclick = convidarEquipe;
+  carregarPainel();
+}
+
+/**
+ * Gera o convite da equipe: um link que já leva o servidor e o código da
+ * operação. A senha vai à parte, para não trafegar no mesmo endereço.
+ */
+async function convidarEquipe() {
+  const link = nuvem.linkConfiguracao(fisc.sala.codigo);
+  if (!link) return toast('Configure o servidor antes.', 'aviso');
+  const texto =
+    `Fiscalização do transporte escolar — operação ${fisc.sala.codigo}\n\n` +
+    `1) Abra este link no celular:\n${link}\n\n` +
+    `2) Toque em "Adicionar à tela inicial" para instalar o aplicativo.\n` +
+    `3) Na aba "Equipe", toque em "Entrar na operação" e digite a senha que enviarei em separado.\n` +
+    `4) Em "Início", escreva seu nome e posto.`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: `Operação ${fisc.sala.codigo}`, text: texto });
+      return;
+    }
+    await navigator.clipboard.writeText(texto);
+    toast('Convite copiado — cole no grupo da equipe.');
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    const alvo = document.getElementById('n_resultado');
+    if (alvo) alvo.innerHTML = `<div class="ok-box"><b>Convite:</b><br><textarea rows="8" class="obs-item">${esc(texto)}</textarea></div>`;
+  }
+}
+
+function botaoTrocarServidorHTML() {
+  const cfg = nuvem.configNuvem();
+  return `
+    <p class="ajuda">
+      Servidor: <b>${esc((cfg?.url || '').replace(/^https?:\/\//, ''))}</b>${cfg?.publicada ? ' (já configurado no endereço publicado)' : ''}.
+    </p>
+    <button class="btn pequeno" id="n_trocar">Usar outro servidor neste aparelho</button>`;
+}
+
+function ligarTrocaServidor() {
+  document.getElementById('n_trocar')?.addEventListener('click', () => {
+    forcarFormServidor = true;
+    renderNuvem();
+  });
+}
+
+function sugerirCodigo() {
+  const doLink = nuvem.codigoPadrao();
+  if (doLink) return doLink;
+  const m = (fisc?.municipio || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8);
+  return `${m || 'OPERACAO'}${fisc?.ano || ''}`;
+}
+
+function autoFotos() {
+  return localStorage.getItem('fte:autoFotos') !== '0';
+}
+
+async function carregarPainel() {
+  const area = document.getElementById('n_painel_area');
+  if (!area || !fisc?.sala) return;
+  try {
+    const p = await nuvem.painel(fisc);
+    area.innerHTML = `
+      <div class="painel-numeros">
+        <div><b>${p.veiculos}</b><span>veículos na nuvem</span></div>
+        <div><b>${p.fotos}</b><span>fotos</span></div>
+        <div><b>${p.agentes.length}</b><span>agentes</span></div>
+      </div>
+      <ul class="lista">
+        ${p.agentes
+          .map(
+            (a) => `<li class="item-lista">
+              <div class="link-item">
+                <b>${esc(a.agente)}</b>
+                <small>último envio: ${a.ultimo ? esc(new Date(a.ultimo).toLocaleString('pt-BR')) : '—'}</small>
+              </div>
+              <span class="selo">${a.veiculos} veíc.</span>
+            </li>`
+          )
+          .join('')}
+      </ul>`;
+  } catch (e) {
+    area.innerHTML = `<div class="alerta-box">${esc(e.message)}</div>`;
+  }
+}
+
+/** Executa a sincronização e atualiza os avisos da tela. */
+async function sincronizarAgora({ silencioso = true } = {}) {
+  if (!fisc?.sala || !nuvem.nuvemConfigurada() || nuvem.estaSincronizando()) return null;
+  if (!navigator.onLine) {
+    if (!silencioso) toast('Aparelho sem conexão.', 'aviso');
+    return null;
+  }
+  try {
+    if (!silencioso) toast('Sincronizando…');
+    marcarStatusNuvem('sincronizando');
+    const r = await nuvem.sincronizar(fisc.id, { comFotos: autoFotos() });
+    fisc = await store.obterFiscalizacao(fisc.id);
+    const resumo = `Enviados ${r.enviados} veículo(s) e ${r.fotosEnviadas} foto(s); recebidos ${r.recebidos} veículo(s) e ${r.fotosRecebidas} foto(s).`;
+    const alvo = document.getElementById('n_resultado');
+    if (alvo) {
+      alvo.innerHTML = `<div class="ok-box">${esc(resumo)}${
+        r.fotosPendentes ? ` <b>${r.fotosPendentes} foto(s) ainda na fila</b> — toque novamente para continuar.` : ''
+      }</div>`;
+    }
+    if (!silencioso) toast('Sincronização concluída.');
+    await atualizarStatusNuvem();
+    if (!silencioso && document.getElementById('n_painel_area')) carregarPainel();
+    if ((r.recebidos || r.apagados) && ['#/veiculos', '#/relatorio', '#/'].includes(location.hash || '#/')) {
+      render();
+    }
+    return r;
+  } catch (e) {
+    marcarStatusNuvem('erro');
+    const alvo = document.getElementById('n_resultado');
+    if (alvo) alvo.innerHTML = `<div class="alerta-box">${esc(e.message)}</div>`;
+    if (!silencioso) toast(e.message, 'aviso');
+    return null;
+  }
+}
+
+function marcarStatusNuvem(estado, texto) {
+  if (!btnStatusNuvem) return;
+  btnStatusNuvem.hidden = !fisc?.sala || !nuvem.nuvemConfigurada();
+  btnStatusNuvem.className = `status-nuvem ${estado}`;
+  const rotulos = { sincronizando: '⏳', ok: '☁️', pendente: '⬆️', erro: '⚠️', offline: '📴' };
+  btnStatusNuvem.textContent = `${rotulos[estado] || '☁️'}${texto ? ` ${texto}` : ''}`;
+}
+
+async function atualizarStatusNuvem() {
+  if (!btnStatusNuvem) return;
+  if (!fisc?.sala || !nuvem.nuvemConfigurada()) {
+    btnStatusNuvem.hidden = true;
+    return;
+  }
+  const p = await nuvem.pendencias(fisc);
+  const total = (p?.veiculos || 0) + (p?.fotos || 0);
+  const selo = document.getElementById('n_pend');
+  if (selo) {
+    selo.className = `selo ${total ? 'aviso' : 'ok'}`;
+    selo.textContent = total ? `${p.veiculos} veíc. / ${p.fotos} fotos pendentes` : 'tudo sincronizado';
+  }
+  if (!navigator.onLine) return marcarStatusNuvem('offline');
+  marcarStatusNuvem(total ? 'pendente' : 'ok', total ? String(total) : '');
+}
+
+function iniciarAutoSync() {
+  const tentar = () => sincronizarAgora({ silencioso: true });
+  setInterval(tentar, 60000);
+  window.addEventListener('online', () => {
+    atualizarStatusNuvem();
+    tentar();
+  });
+  window.addEventListener('offline', atualizarStatusNuvem);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) tentar();
+  });
+}
+
+// ------------------------------------------------------------------- roteador
+
+function semFiscalizacao() {
+  app.innerHTML = `
+    <section class="cartao">
+      <p class="vazio">Nenhuma fiscalização ativa.</p>
+      <button class="btn primario" id="nova">➕ Criar fiscalização</button>
+    </section>`;
+  document.getElementById('nova').onclick = criarFiscalizacao;
+}
+
+function atualizarBarraTopo() {
+  const el = document.getElementById('barra-contexto');
+  el.textContent = fisc
+    ? `Nº ${fisc.numero}/${fisc.ano} • ${fisc.municipio || 'município não informado'} • ${dataCurta(fisc.data)}`
+    : 'Nenhuma fiscalização ativa';
+}
+
+async function render() {
+  liberarURLs();
+  const hash = location.hash || '#/';
+  const [, rota, param] = hash.split('/');
+  atualizarBarraTopo();
+  atualizarStatusNuvem();
+  document.querySelectorAll('.nav-item').forEach((b) => {
+    b.classList.toggle('ativo', b.dataset.rota === `#/${rota || ''}`);
+  });
+  window.scrollTo(0, 0);
+
+  switch (rota) {
+    case '':
+    case undefined:
+      return viewInicio();
+    case 'dados-fisc':
+      return viewDadosFiscalizacao();
+    case 'veiculos':
+      return viewVeiculos();
+    case 'veiculo':
+      return viewVeiculo(param);
+    case 'relatorio':
+      return viewRelatorio();
+    case 'equipe':
+    case 'backup':
+      return viewEquipe();
+    default:
+      return viewInicio();
+  }
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+
+async function iniciar() {
+  // Convite recebido por link: já deixa o servidor e o código configurados.
+  if (nuvem.aplicarConfigDaURL()) {
+    setTimeout(() => toast('Servidor de sincronização configurado pelo convite.'), 600);
+  }
+
+  // O mesmo CSS usado no arquivo exportado vale para a prévia e para a impressão.
+  const estilo = document.createElement('style');
+  estilo.textContent = CSS_RELATORIO;
+  document.head.appendChild(estilo);
+
+  const id = store.idFiscalizacaoAtual();
+  if (id) fisc = await store.obterFiscalizacao(id);
+  if (!fisc) {
+    const lista = await store.listarFiscalizacoes();
+    if (lista.length) {
+      fisc = lista[0];
+      store.definirFiscalizacaoAtual(fisc.id);
+    }
+  }
+  window.addEventListener('hashchange', render);
+  document.querySelectorAll('.nav-item').forEach((b) => {
+    b.onclick = () => ir(b.dataset.rota);
+  });
+  btnStatusNuvem.onclick = () => ir('#/equipe');
+  await render();
+  iniciarAutoSync();
+  sincronizarAgora();
+
+  // (sem service worker nesta versão em arquivo único)
+  navigator.storage?.persist?.().catch(() => {});
+}
+
+iniciar();
+
+})();
+</script>

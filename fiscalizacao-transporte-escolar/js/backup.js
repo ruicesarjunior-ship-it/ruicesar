@@ -101,6 +101,40 @@ export function baixarArquivo(conteudo, nome, tipo) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+/**
+ * Extensões alternativas quando a hospedagem não aceita a original.
+ * O relatório .doc é HTML por dentro, então .html preserva o conteúdo.
+ */
+function alternativas(nome) {
+  if (/\.doc$/i.test(nome)) return [nome.replace(/\.doc$/i, '.html')];
+  if (/\.csv$/i.test(nome)) return [nome.replace(/\.csv$/i, '.txt')];
+  return [];
+}
+
+/**
+ * Quando o aplicativo roda como página publicada no claude.ai, o navegador
+ * bloqueia downloads comuns e a gravação passa por uma confirmação do próprio
+ * visualizador. Fora desse ambiente, esta função simplesmente não se aplica.
+ */
+async function salvarPelaPagina(blob, nome) {
+  const api = typeof globalThis.claude !== 'undefined' ? globalThis.claude : null;
+  if (!api?.use) return false;
+  const downloads = await api.use('downloads').catch(() => null);
+  if (!downloads) return false;
+  for (const tentativa of [nome, ...alternativas(nome)]) {
+    try {
+      await downloads.save({ filename: tentativa, data: blob });
+      return true;
+    } catch (e) {
+      // Extensão recusada: tenta a alternativa. Recusa do usuário: respeita.
+      if (e?.code === 'rejected_extension' || e?.code === 'extension_not_enabled') continue;
+      if (e?.code === 'declined' || e?.code === 'rate_limited') return true;
+      return false;
+    }
+  }
+  return false;
+}
+
 /** Compartilhamento nativo do celular, com queda para download. */
 export async function compartilharOuBaixar(conteudo, nome, tipo) {
   const blob = conteudo instanceof Blob ? conteudo : new Blob([conteudo], { type: tipo });
@@ -113,6 +147,7 @@ export async function compartilharOuBaixar(conteudo, nome, tipo) {
       if (e.name === 'AbortError') return 'cancelado';
     }
   }
+  if (await salvarPelaPagina(blob, nome)) return 'salvo';
   baixarArquivo(blob, nome, tipo);
   return 'baixado';
 }
