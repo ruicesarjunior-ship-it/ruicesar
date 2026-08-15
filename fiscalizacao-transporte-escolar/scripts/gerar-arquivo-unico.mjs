@@ -29,6 +29,7 @@ const MODULOS = [
   'store.js',
   'relatorio.js',
   'backup.js',
+  'nuvem-firebase.js',
   'nuvem.js',
   'app.js',
 ];

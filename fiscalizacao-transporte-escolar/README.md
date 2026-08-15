@@ -95,22 +95,24 @@ python3 -m http.server 8000
 
 ## Sincronização entre os inspetores
 
-> **Passo a passo pronto**: veja [`COMO_COLOCAR_NO_AR.md`](COMO_COLOCAR_NO_AR.md),
-> com as duas etapas que exigem login (publicar o endereço e criar o banco).
+**Já está pronta e ligada** — não é preciso criar conta nem configurar nada. O
+aplicativo usa o projeto Firebase que a Promotoria já mantém (o mesmo do sistema
+de expedição de ofícios), configurado em [`js/config.js`](js/config.js).
 
-Sem nenhuma configuração, o aplicativo funciona só no aparelho e a consolidação é
-feita por arquivo. Para que a equipe trabalhe integrada, configure uma vez o
-servidor de sincronização:
+**Os dados sobem cifrados.** As regras daquele banco não são administradas por
+este aplicativo, e os registros contêm dados pessoais de condutores. Por isso:
 
-1. Crie um projeto gratuito em [supabase.com](https://supabase.com).
-2. Em *SQL Editor → New query*, cole o conteúdo de **`supabase/schema.sql`** e
-   execute. Isso cria as tabelas e as funções de acesso.
-3. Em *Project Settings → API*, copie a **Project URL** e a chave **anon public**.
-4. Preencha esses dois valores em **`js/config.js`** e publique. Assim todo celular
-   que abrir o endereço já vem configurado e a equipe não digita nada.
-   (Alternativa: colar os valores na aba *Equipe* de cada aparelho.)
+- a chave de cifra é derivada da **senha da operação** (PBKDF2-SHA256, 150 mil
+  iterações) e nunca sai do aparelho;
+- cada registro é cifrado com **AES-GCM 256** antes de subir;
+- o caminho no banco é o hash do código + senha, e as placas também viram hash —
+  nem o endereço do nó revela o que há dentro.
 
-Depois disso:
+Quem não tiver o código e a senha não encontra o nó e, se encontrar, lê apenas
+bytes embaralhados. Verificado em teste: das 20 requisições de uma sincronização
+completa, nenhuma levava dado legível.
+
+Uso:
 
 - O **coordenador** abre *Equipe*, define um **código** (ex.: `PRADO2026`) e uma
   **senha** da operação e toca em **Criar operação**.
@@ -132,10 +134,30 @@ feitas em um aparelho alcançam os demais. O relatório final é sempre montado 
 partir do aparelho do coordenador, que numera os veículos na ordem em que os
 recebeu.
 
-**Segurança**: as tabelas ficam inacessíveis com a chave pública (RLS ligado e sem
-policies); todo acesso passa por funções que exigem o código e a senha da operação,
-gravada com hash bcrypt. Use uma senha própria por operação e não a divulgue fora
-da equipe. O tráfego é HTTPS.
+**Se a sincronização acusar recusa do banco** (HTTP 403), as regras do Realtime
+Database precisam liberar o ramo `fiscalizacao` para usuários autenticados. No
+console do Firebase, em *Realtime Database → Regras*, o trecho é:
+
+```json
+{
+  "rules": {
+    "fiscalizacao": { ".read": "auth != null", ".write": "auth != null" }
+  }
+}
+```
+
+Isso é seguro aqui justamente porque o conteúdo já sobe cifrado: um usuário
+anônimo qualquer só alcança bytes embaralhados.
+
+**Banco próprio (opcional)**: para não usar o projeto compartilhado, crie um
+projeto no [Supabase](https://supabase.com), rode `supabase/schema.sql` no
+*SQL Editor* e preencha `SUPABASE_URL` e `SUPABASE_ANON_KEY` em `js/config.js` —
+eles têm prioridade sobre o Firebase. Nesse caminho as tabelas ficam inacessíveis
+pela chave pública (RLS ligado e sem policies) e todo acesso passa por funções que
+exigem o código e a senha da operação, gravada com hash bcrypt.
+
+Use uma senha própria por operação e não a divulgue fora da equipe. O tráfego é
+HTTPS nos dois casos.
 
 **Sinal ruim**: nada trava. O registro é gravado no aparelho e vai para a fila; as
 fotos sobem no máximo 8 por rodada para não prender a sincronização, e é possível

@@ -1,25 +1,30 @@
 /**
  * Configuração do servidor de sincronização.
  *
- * Preencha os dois valores abaixo UMA VEZ, no lugar onde o aplicativo está
- * publicado. Feito isso, todo celular que abrir o endereço já vem configurado:
- * a equipe só precisa do código e da senha da operação.
+ * Já vem preenchida com o projeto Firebase que a Promotoria mantém — o mesmo
+ * usado pelo aplicativo de expedição de ofícios. Não é preciso criar nada: todo
+ * celular que abrir o endereço já sincroniza, bastando o código e a senha da
+ * operação.
  *
- * Onde encontrar (projeto Supabase → Project Settings → API):
- *   SUPABASE_URL       = "Project URL"        (ex.: https://abcdefgh.supabase.co)
- *   SUPABASE_ANON_KEY  = chave "anon public"  (começa com eyJ...)
+ * Sobre a chave abaixo: numa aplicação Firebase de navegador a `apiKey` é
+ * pública por natureza — identifica o projeto, não autoriza acesso. A proteção
+ * dos dados não depende dela: os registros sobem cifrados com AES-GCM, com
+ * chave derivada da SENHA da operação, que nunca sai do aparelho. Ver
+ * js/nuvem-firebase.js.
  *
- * A chave "anon public" é pública por natureza — pode ficar no código e no link
- * enviado à equipe. Ela sozinha não dá acesso a nada: as tabelas estão fechadas
- * e todo acesso exige o código e a senha da operação.
- *
- * NUNCA coloque aqui a chave "service_role".
- *
- * Deixando em branco, o aplicativo funciona normalmente sem sincronização, e o
- * servidor pode ser configurado à mão na aba "Equipe" de cada aparelho.
+ * Alternativa: para usar um banco próprio no Supabase, preencha SUPABASE_URL e
+ * SUPABASE_ANON_KEY (ver supabase/schema.sql). Preenchidos, eles têm prioridade.
+ * NUNCA coloque aqui a chave "service_role" do Supabase.
  */
 
 export const CONFIG = {
+  FIREBASE: {
+    apiKey: 'AIzaSyBFZFZMSPYnVpZgAr6x-H4_eilbxdkvxdI',
+    authDomain: 'expedicao-promotorias.firebaseapp.com',
+    databaseURL: 'https://expedicao-promotorias-default-rtdb.firebaseio.com',
+    projectId: 'expedicao-promotorias',
+  },
+
   SUPABASE_URL: '',
   SUPABASE_ANON_KEY: '',
 

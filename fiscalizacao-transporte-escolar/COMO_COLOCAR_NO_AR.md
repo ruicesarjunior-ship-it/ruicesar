@@ -1,8 +1,8 @@
 # Como colocar o aplicativo no ar — passo a passo
 
-> **Prefere não clicar em telas?** Há um script que faz quase tudo sozinho:
-> veja [`CONFIGURACAO_AUTOMATICA.md`](CONFIGURACAO_AUTOMATICA.md). Este documento
-> é o caminho manual, útil se algo falhar.
+> **As duas etapas já estão concluídas.** Este documento registra como ficou e o
+> que conferir se algo falhar. Para trocar o banco por um projeto Supabase
+> próprio, veja [`CONFIGURACAO_AUTOMATICA.md`](CONFIGURACAO_AUTOMATICA.md).
 
 ## Etapa A — publicar o endereço ✅ CONCLUÍDA
 
@@ -29,52 +29,25 @@ Os dois workflows montam o site completo, então publicar um não derruba o outr
 
 ---
 
-Resta **uma** etapa, que exige o seu login e por isso não pode ser feita por mim:
-**criar o banco** (Supabase), necessário apenas para a sincronização ao vivo.
-Sem ela o aplicativo funciona por completo, com consolidação por arquivo.
+## Etapa B — sincronização ao vivo ✅ CONCLUÍDA
 
----
+Nada a criar: o aplicativo usa o projeto Firebase que a Promotoria já mantém — o
+mesmo do sistema de expedição de ofícios. Os registros sobem **cifrados no
+aparelho**, com chave derivada da senha da operação (ver `js/nuvem-firebase.js`).
 
-## Etapa B — criar o banco da sincronização (≈ 8 minutos)
+**Único ponto a conferir**, caso a sincronização acuse recusa do banco (403): no
+console do Firebase, em *Realtime Database → Regras*, o ramo `fiscalizacao` deve
+estar liberado para usuários autenticados:
 
-1. Acesse **supabase.com** → *Start your project* → entre com a conta Google ou
-   GitHub. O plano gratuito atende com folga uma fiscalização municipal.
-2. Clique em **New project**:
-   - *Name*: `fiscalizacao-transporte-escolar`
-   - *Database Password*: gere uma senha forte e guarde-a (é do banco, não é a
-     senha da operação)
-   - *Region*: **South America (São Paulo)**
-   - **Create new project** e aguarde o provisionamento (~2 min).
-3. No menu lateral, abra **SQL Editor** → **New query**.
-4. Abra o arquivo [`supabase/schema.sql`](supabase/schema.sql) deste repositório,
-   copie **todo** o conteúdo, cole no editor e clique em **Run**.
-   Deve aparecer *Success. No rows returned*.
-5. No menu lateral, abra **Project Settings** (engrenagem) → **API** e copie:
-   - **Project URL** — algo como `https://abcdefgh.supabase.co`
-   - Chave **`anon` `public`** — um texto longo começando com `eyJ...`
+```json
+{
+  "rules": {
+    "fiscalizacao": { ".read": "auth != null", ".write": "auth != null" }
+  }
+}
+```
 
-   > Nunca use nem divulgue a chave **`service_role`**. Ela dá acesso total.
-
-6. Agora escolha **um** dos caminhos:
-
-   **Caminho 1 — deixar tudo pronto para a equipe (recomendado).**
-   Edite o arquivo `fiscalizacao-transporte-escolar/js/config.js` e preencha:
-
-   ```js
-   export const CONFIG = {
-     SUPABASE_URL: 'https://abcdefgh.supabase.co',
-     SUPABASE_ANON_KEY: 'eyJhbGciOi...',
-     CODIGO_OPERACAO_PADRAO: '',
-   };
-   ```
-
-   Salve e envie a alteração (ou me passe os dois valores no chat que eu edito,
-   testo e envio — a chave `anon` é pública, pode ser compartilhada). A partir daí
-   **nenhum policial precisa configurar nada**: basta abrir o endereço.
-
-   **Caminho 2 — configurar cada aparelho à mão.**
-   No aplicativo, aba **Equipe**, cole a *Project URL* e a chave *anon* nos dois
-   campos e toque em *Salvar configuração*. Repita em cada celular.
+(Preserve as regras que já existirem para o app de ofícios.)
 
 ---
 
@@ -97,7 +70,12 @@ Sem ela o aplicativo funciona por completo, com consolidação por arquivo.
 
 ## Encerramento e LGPD
 
-Concluído o relatório, apague os dados pessoais da nuvem: no Supabase,
-*SQL Editor* → `delete from fiscalizacoes where codigo = 'PRADO2026';`
-(as demais tabelas são apagadas em cascata). Os registros permanecem no aparelho
-e no backup `.json` que o senhor exportar.
+Concluído o relatório, apague os dados da nuvem. No console do Firebase, em
+*Realtime Database*, abra o ramo `fiscalizacao` e exclua o nó da operação (o nome
+é um código longo — se houver mais de um, exclua o ramo `fiscalizacao` inteiro
+depois de encerrar todas as operações). Os registros permanecem nos aparelhos e
+no backup `.json` exportado.
+
+Ainda que o conteúdo esteja cifrado e ilegível sem a senha da operação, apagar ao
+final é boa prática de minimização de dados — e o espaço do banco é compartilhado
+com o sistema de expedição de ofícios.

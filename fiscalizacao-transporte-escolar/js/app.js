@@ -946,12 +946,21 @@ async function renderNuvem() {
     return;
   }
 
+  // Dentro de uma página incorporada (visualizador de artefatos), o navegador
+  // bloqueia conexões externas — a sincronização só funciona no endereço próprio.
+  const incorporado = window.top !== window.self;
+  const avisoIncorporado = incorporado
+    ? `<div class="alerta-box">Esta cópia está aberta dentro de outra página, que bloqueia conexões externas.
+       A sincronização só funciona no endereço publicado do aplicativo. Aqui, use o backup por arquivo.</div>`
+    : '';
+
   if (!fisc || !fisc.sala) {
     // Sem fiscalização local o agente ainda pode (e deve) entrar na operação:
     // a fiscalização é criada automaticamente a partir dos dados da nuvem.
     area.innerHTML = `
       <section class="cartao destaque">
         <h2>Sincronização da equipe</h2>
+        ${avisoIncorporado}
         <p class="ajuda">
           O <b>coordenador</b> cria a operação e passa o código e a senha à equipe.
           Cada agente entra com esses mesmos dados no seu aparelho.
@@ -1018,6 +1027,7 @@ async function renderNuvem() {
         Última sincronização: ${fisc.sala.ultimoSync ? esc(new Date(fisc.sala.ultimoSync).toLocaleString('pt-BR')) : 'ainda não sincronizado'}.
         ${navigator.onLine ? '' : '<b>Aparelho sem conexão</b> — os registros sobem assim que houver sinal.'}
       </p>
+      <p class="ajuda">${esc(nuvem.servidorEmUso()?.descricao || '')}</p>
       <label class="campo linha-check">
         <input type="checkbox" id="n_fotos" ${autoFotos() ? 'checked' : ''}>
         <span>Enviar também as fotos (desmarque se o sinal estiver ruim)</span>
@@ -1082,11 +1092,9 @@ async function convidarEquipe() {
 }
 
 function botaoTrocarServidorHTML() {
-  const cfg = nuvem.configNuvem();
+  const srv = nuvem.servidorEmUso();
   return `
-    <p class="ajuda">
-      Servidor: <b>${esc((cfg?.url || '').replace(/^https?:\/\//, ''))}</b>${cfg?.publicada ? ' (já configurado no endereço publicado)' : ''}.
-    </p>
+    <p class="ajuda">Servidor: <b>${esc(srv?.descricao || '—')}</b>.</p>
     <button class="btn pequeno" id="n_trocar">Usar outro servidor neste aparelho</button>`;
 }
 

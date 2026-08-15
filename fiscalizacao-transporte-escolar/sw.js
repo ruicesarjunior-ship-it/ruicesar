@@ -18,6 +18,7 @@ const ARQUIVOS = [
   './js/relatorio.js',
   './js/backup.js',
   './js/nuvem.js',
+  './js/nuvem-firebase.js',
   './icons/icone.svg',
   './icons/icone-mascarado.svg',
 ];

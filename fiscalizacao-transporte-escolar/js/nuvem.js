@@ -1,14 +1,14 @@
 /**
- * Sincronização da equipe (opcional).
+ * Sincronização da equipe.
  *
- * O aplicativo continua sendo "offline-first": tudo é gravado primeiro no
- * aparelho. Esta camada apenas empurra o que mudou para a nuvem e traz o que os
- * outros agentes registraram, quando houver sinal. Sem configuração de servidor,
- * nada aqui é executado e o aplicativo funciona exatamente como antes.
+ * O aplicativo é "offline-first": tudo é gravado primeiro no aparelho. Esta
+ * camada empurra o que mudou e traz o que os outros agentes registraram, quando
+ * houver sinal. Sem servidor configurado, nada aqui é executado.
  *
- * Servidor: projeto Supabase do próprio usuário (ver supabase/schema.sql).
- * Autenticação: código + senha da operação, verificados no banco; as tabelas
- * não são acessíveis diretamente com a chave pública.
+ * Há dois transportes possíveis, com a mesma interface:
+ *   - Firebase Realtime Database (padrão): reaproveita o projeto que a
+ *     Promotoria já mantém; os registros sobem cifrados no próprio aparelho;
+ *   - Supabase: banco próprio, com as funções de supabase/schema.sql.
  */
 
 import { put } from './db.js';
@@ -19,60 +19,39 @@ import {
 import { fotosDaFiscalizacao, blobParaDataURL, dataURLParaBlob } from './fotos.js';
 import { uid } from './db.js';
 import { CONFIG } from './config.js';
+import { configurarFirebase, firebaseDisponivel, transporteFirebase } from './nuvem-firebase.js';
 
 const CHAVE_CFG = 'fte:nuvem';
 const LIMITE_FOTOS_POR_SYNC = 8; // evita travar a sincronização numa conexão ruim
 
+configurarFirebase(CONFIG.FIREBASE);
+
 // ------------------------------------------------------------ configuração
 
 /**
- * Configuração vigente: o que foi digitado neste aparelho tem prioridade;
- * na falta dele, vale o que estiver publicado em config.js — assim a equipe
- * abre o endereço e já está pronta para sincronizar, sem digitar nada.
+ * Configuração vigente. O que foi digitado neste aparelho tem prioridade; na
+ * falta dele vale o que está publicado em config.js — assim a equipe abre o
+ * endereço e já pode sincronizar, sem digitar nada.
  */
 export function configNuvem() {
   try {
     const local = JSON.parse(localStorage.getItem(CHAVE_CFG) || 'null');
-    if (local?.url && local?.chave) return local;
+    if (local?.url && local?.chave) return { ...local, tipo: 'supabase' };
   } catch {
     /* configuração local corrompida: cai para a publicada */
   }
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
-    return { url: CONFIG.SUPABASE_URL.replace(/\/+$/, ''), chave: CONFIG.SUPABASE_ANON_KEY, publicada: true };
+    return {
+      tipo: 'supabase',
+      url: CONFIG.SUPABASE_URL.replace(/\/+$/, ''),
+      chave: CONFIG.SUPABASE_ANON_KEY,
+      publicada: true,
+    };
+  }
+  if (firebaseDisponivel()) {
+    return { tipo: 'firebase', url: CONFIG.FIREBASE.databaseURL, publicada: true };
   }
   return null;
-}
-
-/** Código sugerido para a operação (config publicada ou link recebido). */
-export function codigoPadrao() {
-  return localStorage.getItem('fte:opPadrao') || CONFIG.CODIGO_OPERACAO_PADRAO || '';
-}
-
-/**
- * Configuração por link: o coordenador envia um endereço já com o servidor e o
- * código da operação, e o agente só digita a senha. A senha nunca vai no link.
- */
-export function aplicarConfigDaURL() {
-  const p = new URLSearchParams(location.search);
-  const srv = p.get('srv');
-  const chave = p.get('key');
-  const op = p.get('op');
-  if (!srv && !chave && !op) return false;
-  if (srv && chave) definirConfigNuvem(srv, chave);
-  if (op) localStorage.setItem('fte:opPadrao', op.trim().toUpperCase());
-  // Limpa a barra de endereços para não deixar a configuração exposta no histórico.
-  history.replaceState(null, '', location.pathname + location.hash);
-  return true;
-}
-
-/** Link de configuração para distribuir à equipe (sem a senha). */
-export function linkConfiguracao(codigoOperacao) {
-  const cfg = configNuvem();
-  if (!cfg) return null;
-  const base = `${location.origin}${location.pathname}`;
-  const p = new URLSearchParams({ srv: cfg.url, key: cfg.chave });
-  if (codigoOperacao) p.set('op', codigoOperacao);
-  return `${base}?${p.toString()}`;
 }
 
 export function definirConfigNuvem(url, chave) {
@@ -89,10 +68,45 @@ export function nuvemConfigurada() {
   return !!configNuvem();
 }
 
-/** Chamada a uma função do banco (RPC). */
-export async function rpc(funcao, params) {
+export function codigoPadrao() {
+  return localStorage.getItem('fte:opPadrao') || CONFIG.CODIGO_OPERACAO_PADRAO || '';
+}
+
+/**
+ * Configuração por link: o coordenador envia um endereço já com o servidor e o
+ * código da operação, e o agente só digita a senha. A senha nunca vai no link.
+ */
+export function aplicarConfigDaURL() {
+  const p = new URLSearchParams(location.search);
+  const srv = p.get('srv');
+  const chave = p.get('key');
+  const op = p.get('op');
+  if (!srv && !chave && !op) return false;
+  if (srv && chave) definirConfigNuvem(srv, chave);
+  if (op) localStorage.setItem('fte:opPadrao', op.trim().toUpperCase());
+  history.replaceState(null, '', location.pathname + location.hash);
+  return true;
+}
+
+/** Link de configuração para distribuir à equipe (sem a senha). */
+export function linkConfiguracao(codigoOperacao) {
   const cfg = configNuvem();
-  if (!cfg) throw new Error('Servidor de sincronização não configurado.');
+  if (!cfg) return null;
+  const base = `${location.origin}${location.pathname}`;
+  const p = new URLSearchParams();
+  if (cfg.tipo === 'supabase' && !cfg.publicada) {
+    p.set('srv', cfg.url);
+    p.set('key', cfg.chave);
+  }
+  if (codigoOperacao) p.set('op', codigoOperacao);
+  const consulta = p.toString();
+  return consulta ? `${base}?${consulta}` : base;
+}
+
+// --------------------------------------------------- transporte: Supabase
+
+async function rpc(funcao, params) {
+  const cfg = configNuvem();
   let resp;
   try {
     resp = await fetch(`${cfg.url}/rest/v1/rpc/${funcao}`, {
@@ -107,17 +121,73 @@ export async function rpc(funcao, params) {
   } catch {
     throw new Error('Sem conexão com o servidor.');
   }
-  const texto = await resp.text();
+  const txt = await resp.text();
   let corpo = null;
   try {
-    corpo = texto ? JSON.parse(texto) : null;
+    corpo = txt ? JSON.parse(txt) : null;
   } catch {
     corpo = null;
   }
-  if (!resp.ok) {
-    throw new Error(corpo?.message || corpo?.hint || `Falha na sincronização (HTTP ${resp.status}).`);
-  }
+  if (!resp.ok) throw new Error(corpo?.message || corpo?.hint || `Falha na sincronização (HTTP ${resp.status}).`);
   return corpo;
+}
+
+const transporteSupabase = {
+  nome: 'supabase',
+  async criar(codigo, senha, fisc) {
+    await rpc('fisc_criar', { p_codigo: codigo, p_senha: senha, p_dados: fisc });
+    return { codigo: codigo.trim().toUpperCase() };
+  },
+  async entrar(codigo, senha) {
+    const r = await rpc('fisc_entrar', { p_codigo: codigo, p_senha: senha });
+    return { codigo: String(r.codigo), fiscalizacao: r.fiscalizacao };
+  },
+  async sync(codigo, senha, { fisc, veiculos, removidos, desde }) {
+    const r = await rpc('fisc_sync', {
+      p_codigo: codigo,
+      p_senha: senha,
+      p_fisc: fisc,
+      p_veiculos: veiculos,
+      p_removidos: removidos,
+      p_desde: desde,
+    });
+    return {
+      servidorEm: r.servidorEm,
+      fiscalizacao: r.fiscalizacao,
+      veiculos: r.veiculos || [],
+      removidos: (r.removidos || []).map((chave) => ({ chave, quando: null })),
+      fotos: r.fotos || [],
+    };
+  },
+  enviarFoto(codigo, senha, { veiculoChave, origemId, legenda, agente, imagemBase64 }) {
+    return rpc('fisc_foto_enviar', {
+      p_codigo: codigo,
+      p_senha: senha,
+      p_veiculo_chave: veiculoChave,
+      p_origem_id: origemId,
+      p_legenda: legenda,
+      p_agente: agente,
+      p_imagem: imagemBase64,
+    });
+  },
+  baixarFoto(codigo, senha, id) {
+    return rpc('fisc_foto_baixar', { p_codigo: codigo, p_senha: senha, p_id: id });
+  },
+};
+
+function transporte() {
+  const cfg = configNuvem();
+  if (!cfg) throw new Error('Servidor de sincronização não configurado.');
+  return cfg.tipo === 'firebase' ? transporteFirebase : transporteSupabase;
+}
+
+/** Nome amigável do servidor em uso, para a tela "Equipe". */
+export function servidorEmUso() {
+  const cfg = configNuvem();
+  if (!cfg) return null;
+  return cfg.tipo === 'firebase'
+    ? { tipo: 'firebase', descricao: 'Firebase da Promotoria (registros cifrados no aparelho)' }
+    : { tipo: 'supabase', descricao: (cfg.url || '').replace(/^https?:\/\//, '') };
 }
 
 // ------------------------------------------------------------------ sala
@@ -134,25 +204,25 @@ function fiscParaNuvem(fisc) {
 }
 
 export async function criarSala(fisc, codigo, senha) {
-  await rpc('fisc_criar', { p_codigo: codigo, p_senha: senha, p_dados: fiscParaNuvem(fisc) });
-  fisc.sala = { codigo: codigo.trim().toUpperCase(), senha, ultimoSync: null, removidos: [] };
+  const cod = codigo.trim().toUpperCase();
+  if (cod.length < 4) throw new Error('O código da operação deve ter ao menos 4 caracteres.');
+  if ((senha || '').length < 4) throw new Error('A senha da operação deve ter ao menos 4 caracteres.');
+  await transporte().criar(cod, senha, fiscParaNuvem(fisc));
+  fisc.sala = { codigo: cod, senha, ultimoSync: null, ultimoEnvio: null, removidos: [] };
   await salvarFiscalizacao(fisc);
   return fisc;
 }
 
-/**
- * Entra numa operação já existente. Se `fiscLocal` for informada, ela é vinculada
- * à sala; caso contrário é criada uma fiscalização local a partir da nuvem.
- */
 export async function entrarSala(fiscLocal, codigo, senha) {
-  const r = await rpc('fisc_entrar', { p_codigo: codigo, p_senha: senha });
+  const cod = codigo.trim().toUpperCase();
+  const r = await transporte().entrar(cod, senha);
   let fisc = fiscLocal;
   if (!fisc) {
-    fisc = novaFiscalizacao({ ...r.fiscalizacao, id: uid('fisc') });
+    fisc = novaFiscalizacao({ ...(r.fiscalizacao || {}), id: uid('fisc') });
   } else if (r.fiscalizacao) {
     Object.assign(fisc, r.fiscalizacao, { id: fisc.id });
   }
-  fisc.sala = { codigo: String(r.codigo), senha, ultimoSync: null, removidos: [] };
+  fisc.sala = { codigo: String(r.codigo || cod), senha, ultimoSync: null, ultimoEnvio: null, removidos: [] };
   await salvarFiscalizacao(fisc);
   return fisc;
 }
@@ -205,13 +275,12 @@ export async function sincronizar(fiscId, { comFotos = true } = {}) {
       .filter((v) => !desdeLocal || (v.atualizadoEm || '') > desdeLocal)
       .map((v) => ({ chave: chaveVeiculo(v), agente: v.inspetor || '', dados: v }));
 
-    const resposta = await rpc('fisc_sync', {
-      p_codigo: codigo,
-      p_senha: senha,
-      p_fisc: fiscParaNuvem(fisc),
-      p_veiculos: paraEnviar,
-      p_removidos: (fisc.sala.removidos || []).map((chave) => ({ chave })),
-      p_desde: desde,
+    const resposta = await transporte().sync(codigo, senha, {
+      fisc: fiscParaNuvem(fisc),
+      veiculos: paraEnviar,
+      removidos: (fisc.sala.removidos || []).map((chave) => ({ chave })),
+      chavesLocais: locais.map((v) => chaveVeiculo(v)),
+      desde,
     });
 
     // Cabeçalho da fiscalização — prevalece a versão mais recente.
@@ -223,13 +292,13 @@ export async function sincronizar(fiscId, { comFotos = true } = {}) {
     // Exclusões feitas por outros aparelhos.
     let apagados = 0;
     const porChave = new Map(locais.map((v) => [chaveVeiculo(v), v]));
-    for (const chave of resposta.removidos || []) {
+    for (const { chave, quando } of resposta.removidos || []) {
       const alvo = porChave.get(chave);
-      if (alvo) {
-        await excluirVeiculo(alvo.id);
-        porChave.delete(chave);
-        apagados += 1;
-      }
+      if (!alvo) continue;
+      if (quando && (alvo.atualizadoEm || '') > quando) continue; // reeditado depois: mantém
+      await excluirVeiculo(alvo.id);
+      porChave.delete(chave);
+      apagados += 1;
     }
 
     // Veículos vindos da nuvem.
@@ -300,16 +369,15 @@ async function sincronizarFotos(fisc, porChave, metadadosRemotos) {
     const veiculo = veiculoPorId.get(f.veiculoId);
     if (!veiculo) continue;
     const dataURL = await blobParaDataURL(f.blob);
-    await rpc('fisc_foto_enviar', {
-      p_codigo: codigo,
-      p_senha: senha,
-      p_veiculo_chave: chaveVeiculo(veiculo),
-      p_origem_id: f.origemId || f.id,
-      p_legenda: f.legenda || '',
-      p_agente: veiculo.inspetor || '',
-      p_imagem: dataURL.split(',')[1],
+    await transporte().enviarFoto(codigo, senha, {
+      veiculoChave: chaveVeiculo(veiculo),
+      origemId: f.origemId || f.id,
+      legenda: f.legenda || '',
+      agente: veiculo.inspetor || '',
+      imagemBase64: dataURL.split(',')[1],
     });
     f.sincronizada = true;
+    f.origemId = f.origemId || f.id;
     await put('fotos', f);
     enviadas += 1;
   }
@@ -318,13 +386,13 @@ async function sincronizarFotos(fisc, porChave, metadadosRemotos) {
   let recebidas = 0;
   const novas = metadadosRemotos.filter((m) => !origensLocais.has(m.origemId));
   for (const meta of novas.slice(0, LIMITE_FOTOS_POR_SYNC)) {
-    const veiculo = porChave.get(meta.veiculoChave);
-    if (!veiculo) continue;
-    const completa = await rpc('fisc_foto_baixar', { p_codigo: codigo, p_senha: senha, p_id: meta.id });
+    const completa = await transporte().baixarFoto(codigo, senha, meta.id);
     if (!completa?.imagem) continue;
+    const veiculo = porChave.get(completa.veiculoChave || meta.veiculoChave);
+    if (!veiculo) continue;
     await put('fotos', {
       id: uid('foto'),
-      origemId: completa.origemId,
+      origemId: completa.origemId || meta.origemId,
       veiculoId: veiculo.id,
       fiscalizacaoId: fisc.id,
       itemId: null,
@@ -336,15 +404,31 @@ async function sincronizarFotos(fisc, porChave, metadadosRemotos) {
     recebidas += 1;
   }
 
-  const restantes =
-    pendentes.length - enviadas + Math.max(0, novas.length - recebidas);
+  const restantes = pendentes.length - enviadas + Math.max(0, novas.length - recebidas);
   return { enviadas, recebidas, pendentes: restantes };
 }
 
-/** Produção consolidada por agente (painel do coordenador). */
+/**
+ * Produção por agente, calculada a partir do que já foi consolidado neste
+ * aparelho — funciona igual nos dois transportes e também sem sinal.
+ */
 export async function painel(fisc) {
   if (!fisc?.sala) throw new Error('Fiscalização sem operação em nuvem.');
-  return rpc('fisc_painel', { p_codigo: fisc.sala.codigo, p_senha: fisc.sala.senha });
+  const veiculos = await listarVeiculos(fisc.id);
+  const fotos = await fotosDaFiscalizacao(fisc.id);
+  const porAgente = new Map();
+  for (const v of veiculos) {
+    const nome = (v.inspetor || '').trim() || '(sem identificação)';
+    const atual = porAgente.get(nome) || { agente: nome, veiculos: 0, ultimo: null };
+    atual.veiculos += 1;
+    if (!atual.ultimo || (v.atualizadoEm || '') > atual.ultimo) atual.ultimo = v.atualizadoEm;
+    porAgente.set(nome, atual);
+  }
+  return {
+    veiculos: veiculos.length,
+    fotos: fotos.length,
+    agentes: [...porAgente.values()].sort((a, b) => b.veiculos - a.veiculos),
+  };
 }
 
 /** Quantidade de registros ainda não enviados (mostrado na barra superior). */
