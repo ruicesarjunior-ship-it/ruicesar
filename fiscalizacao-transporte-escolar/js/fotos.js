@@ -27,16 +27,21 @@ export async function comprimir(file) {
   return blob || file;
 }
 
-export async function salvarFotos(files, { veiculoId, fiscalizacaoId, itemId = null }) {
+/** Tipos usados para nomear as fotos no pacote entregue à IA. */
+export const TIPOS_FOTO = ['documento', 'placa', 'faixa', 'interior', 'irregularidade', 'outra'];
+
+export async function salvarFotos(files, { veiculoId, fiscalizacaoId, itemId = null, tipo = 'outra' }) {
   const salvas = [];
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue;
     const blob = await comprimir(file);
     const foto = {
       id: uid('foto'),
+      origemId: uid('foto'),
       veiculoId,
       fiscalizacaoId,
       itemId,
+      tipo,
       blob,
       legenda: '',
       criadoEm: new Date().toISOString(),

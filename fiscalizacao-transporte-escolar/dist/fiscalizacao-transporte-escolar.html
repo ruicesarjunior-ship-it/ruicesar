@@ -277,6 +277,41 @@ html, body {
 .op.sel.ok { background: var(--verde-ok); border-color: var(--verde-ok); color: #fff; }
 .op.sel.perigo { background: var(--vermelho); border-color: var(--vermelho); color: #fff; }
 .op.sel:not(.ok):not(.perigo) { background: var(--texto-fraco); border-color: var(--texto-fraco); color: #fff; }
+/* ------------------------------------------- checklist em modo rápido */
+
+.alternador { display: flex; gap: 4px; }
+.alternador .op { flex: none; padding: 7px 12px; min-height: 36px; font-size: .78rem; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0; }
+.chip {
+  border: 1px solid var(--borda);
+  background: #fff;
+  color: var(--texto);
+  border-radius: 999px;
+  padding: 11px 14px;
+  font-size: .86rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+}
+.chip.sel { background: var(--vermelho); border-color: var(--vermelho); color: #fff; }
+.chip.sel::before { content: '✕ '; }
+.grupo.mais-itens { margin-top: 4px; }
+.grupo.mais-itens .chips { padding: 10px 12px; }
+
+.lista-marcados { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.marcado {
+  border-left: 4px solid var(--vermelho);
+  background: var(--vermelho-claro);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.marcado-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.marcado-topo b { font-size: .9rem; line-height: 1.3; }
+.marcado small { display: block; color: var(--texto-fraco); font-size: .72rem; margin-top: 2px; }
+.marcado .obs-item { margin-top: 8px; background: #fff; }
+
 .obs-item {
   width: 100%;
   margin-top: 8px;
@@ -327,6 +362,17 @@ html, body {
   border-radius: 10px;
   border: 1px solid var(--borda);
   cursor: zoom-in;
+}
+.foto .tipo-foto {
+  width: 100%;
+  margin-top: 4px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: .76rem;
+  font-family: inherit;
+  background: #fff;
+  color: var(--texto);
 }
 .foto .legenda {
   width: 100%;
@@ -627,6 +673,8 @@ const ITENS = [
   // ---------------------------------------------------------------- condutor
   {
     id: 'cnh_categoria',
+    curto: 'CNH cat. D',
+    frequente: true,
     grupo: 'condutor',
     titulo: 'CNH categoria D (ou superior)',
     ajuda: 'Conferir a categoria impressa na CNH. Categorias C ou B não autorizam o transporte escolar.',
@@ -636,6 +684,7 @@ const ITENS = [
   },
   {
     id: 'cnh_validade',
+    curto: 'CNH vencida',
     grupo: 'condutor',
     titulo: 'CNH dentro da validade',
     frase: 'CNH vencida',
@@ -644,6 +693,8 @@ const ITENS = [
   },
   {
     id: 'cete',
+    curto: 'Curso CETE',
+    frequente: true,
     grupo: 'condutor',
     titulo: 'Curso especializado de transporte escolar (CETE)',
     ajuda: 'Certificado do curso especializado, nos termos da regulamentação do CONTRAN.',
@@ -653,6 +704,8 @@ const ITENS = [
   },
   {
     id: 'autorizacao',
+    curto: 'Autorização',
+    frequente: true,
     grupo: 'condutor',
     titulo: 'Autorização para exercer a atividade de condutor escolar',
     ajuda: 'Autorização expedida pelo órgão executivo de trânsito / poder concedente.',
@@ -662,6 +715,7 @@ const ITENS = [
   },
   {
     id: 'autorizacao_afixada',
+    curto: 'Autorização afixada',
     grupo: 'condutor',
     titulo: 'Autorização afixada no interior do veículo, com a lotação',
     frase: 'autorização não afixada na parte interna do veículo em local visível',
@@ -670,6 +724,8 @@ const ITENS = [
   },
   {
     id: 'psicotecnico',
+    curto: 'Psicotécnico',
+    frequente: true,
     grupo: 'condutor',
     titulo: 'Exame psicotécnico específico vigente',
     frase: 'ausência de exame psicotécnico para transporte escolar',
@@ -678,6 +734,7 @@ const ITENS = [
   },
   {
     id: 'matricula_detran',
+    curto: 'Matrícula DETRAN',
     grupo: 'condutor',
     titulo: 'Matrícula/cadastro do condutor no DETRAN',
     frase: 'ausência de matrícula no DETRAN',
@@ -686,6 +743,7 @@ const ITENS = [
   },
   {
     id: 'idade_21',
+    curto: 'Idade < 21',
     grupo: 'condutor',
     titulo: 'Condutor maior de 21 anos',
     frase: 'condutor com idade inferior a 21 anos',
@@ -694,6 +752,7 @@ const ITENS = [
   },
   {
     id: 'prontuario',
+    curto: 'Prontuário',
     grupo: 'condutor',
     titulo: 'Prontuário sem infração grave/gravíssima nos últimos 12 meses',
     ajuda: 'Também impede a atividade a reincidência em infrações médias no período.',
@@ -705,6 +764,8 @@ const ITENS = [
   // ----------------------------------------------------------------- veículo
   {
     id: 'crlv',
+    curto: 'CRLV',
+    frequente: true,
     grupo: 'veiculo',
     titulo: 'CRLV vigente',
     frase: 'veículo sem CRLV vigente',
@@ -713,6 +774,7 @@ const ITENS = [
   },
   {
     id: 'registro_passageiros',
+    curto: 'Registro passageiros',
     grupo: 'veiculo',
     titulo: 'Registro como veículo de passageiros',
     frase: 'veículo não registrado na categoria de transporte de passageiros',
@@ -721,6 +783,8 @@ const ITENS = [
   },
   {
     id: 'inspecao_semestral',
+    curto: 'Inspeção semestral',
+    frequente: true,
     grupo: 'veiculo',
     titulo: 'Inspeção semestral de segurança em dia',
     ajuda: 'Vistoria semestral dos equipamentos obrigatórios e de segurança.',
@@ -730,6 +794,7 @@ const ITENS = [
   },
   {
     id: 'cadastro_municipal',
+    curto: 'Cadastro municipal',
     grupo: 'veiculo',
     titulo: 'Cadastro/permissão municipal para o transporte escolar',
     ajuda: 'Exigências próprias do Município (art. 139 do CTB).',
@@ -739,6 +804,7 @@ const ITENS = [
   },
   {
     id: 'contrato_prefeitura',
+    curto: 'Contrato prefeitura',
     grupo: 'veiculo',
     titulo: 'Contrato/credenciamento com a Prefeitura (serviço terceirizado)',
     frase: 'veículo sem contrato ou credenciamento válido junto à Administração Municipal',
@@ -747,6 +813,7 @@ const ITENS = [
   },
   {
     id: 'seguro',
+    curto: 'Seguro',
     grupo: 'veiculo',
     titulo: 'Seguro obrigatório/contratual em vigor',
     frase: 'ausência de comprovação de seguro em vigor',
@@ -757,6 +824,8 @@ const ITENS = [
   // ------------------------------------------------------------ equipamentos
   {
     id: 'faixa_escolar',
+    curto: 'Faixa ESCOLAR',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Faixa amarela horizontal com o dístico "ESCOLAR"',
     ajuda: 'Faixa de 40 cm de largura, à meia altura, nas laterais e na traseira, com o dístico ESCOLAR em preto.',
@@ -766,6 +835,8 @@ const ITENS = [
   },
   {
     id: 'tacografo',
+    curto: 'Tacógrafo',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Tacógrafo instalado e em funcionamento',
     ajuda: 'Registrador instantâneo inalterável de velocidade e tempo.',
@@ -775,6 +846,8 @@ const ITENS = [
   },
   {
     id: 'tacografo_laudo',
+    curto: 'Laudo tacógrafo',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Laudo/aferição do tacógrafo vigente',
     frase: 'ausência de laudo de aferição do tacógrafo',
@@ -783,6 +856,8 @@ const ITENS = [
   },
   {
     id: 'cintos',
+    curto: 'Cintos',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Cintos de segurança para todos os passageiros',
     ajuda: 'Em número igual à lotação e em condições de uso.',
@@ -792,6 +867,7 @@ const ITENS = [
   },
   {
     id: 'lanternas',
+    curto: 'Lanternas',
     grupo: 'equipamentos',
     titulo: 'Lanternas dianteiras (branca/âmbar) e traseiras (vermelhas)',
     frase: 'ausência das lanternas obrigatórias de identificação do transporte escolar',
@@ -800,6 +876,8 @@ const ITENS = [
   },
   {
     id: 'iluminacao',
+    curto: 'Iluminação',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Sistema de iluminação original e em funcionamento',
     ajuda: 'Verificar faróis, lanternas, luz de freio e setas; anotar alterações e lâmpadas queimadas.',
@@ -809,6 +887,7 @@ const ITENS = [
   },
   {
     id: 'farois_ligados',
+    curto: 'Faróis apagados',
     grupo: 'equipamentos',
     titulo: 'Faróis acesos durante a circulação',
     frase: 'circulação sem os faróis acesos',
@@ -817,6 +896,8 @@ const ITENS = [
   },
   {
     id: 'placas',
+    curto: 'Placa ilegível',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Placas de identificação legíveis e visíveis',
     frase: 'placa de identificação ilegível',
@@ -825,6 +906,7 @@ const ITENS = [
   },
   {
     id: 'equip_contran',
+    curto: 'Equip. CONTRAN',
     grupo: 'equipamentos',
     titulo: 'Demais equipamentos obrigatórios conforme o CONTRAN',
     ajuda: 'Extintor (quando exigido), saída de emergência, martelo, sinalização de emergência, estepe, etc.',
@@ -834,6 +916,7 @@ const ITENS = [
   },
   {
     id: 'saida_emergencia',
+    curto: 'Saída emergência',
     grupo: 'equipamentos',
     titulo: 'Saída de emergência sinalizada e desobstruída',
     frase: 'saída de emergência obstruída ou sem sinalização',
@@ -844,6 +927,7 @@ const ITENS = [
   // ------------------------------------------------------------- conservação
   {
     id: 'pneus',
+    curto: 'Pneus',
     grupo: 'conservacao',
     titulo: 'Pneus em condições de uso',
     ajuda: 'Sulco mínimo de 1,6 mm, sem bolhas, cortes ou deformações; verificar o estepe.',
@@ -853,6 +937,8 @@ const ITENS = [
   },
   {
     id: 'parabrisa',
+    curto: 'Para-brisa',
+    frequente: true,
     grupo: 'conservacao',
     titulo: 'Para-brisa e vidros íntegros',
     frase: 'para-brisa trincado',
@@ -861,6 +947,7 @@ const ITENS = [
   },
   {
     id: 'freios',
+    curto: 'Freios',
     grupo: 'conservacao',
     titulo: 'Sistema de freios em funcionamento',
     frase: 'sistema de freios em desconformidade',
@@ -869,6 +956,7 @@ const ITENS = [
   },
   {
     id: 'portas_bancos',
+    curto: 'Bancos/portas',
     grupo: 'conservacao',
     titulo: 'Portas, bancos e estruturas internas firmes e íntegros',
     frase: 'bancos, portas ou estruturas internas em más condições',
@@ -877,6 +965,7 @@ const ITENS = [
   },
   {
     id: 'conservacao_geral',
+    curto: 'Conservação',
     grupo: 'conservacao',
     titulo: 'Estado geral de conservação e limpeza',
     frase: 'veículo em mau estado de conservação, comprometendo a segurança',
@@ -887,6 +976,8 @@ const ITENS = [
   // ---------------------------------------------------------------- operação
   {
     id: 'lotacao',
+    curto: 'Excesso lotação',
+    frequente: true,
     grupo: 'operacao',
     titulo: 'Número de escolares dentro da lotação autorizada',
     frase: 'transporte de escolares em número superior à lotação permitida',
@@ -895,6 +986,8 @@ const ITENS = [
   },
   {
     id: 'monitor',
+    curto: 'Sem monitor',
+    frequente: true,
     grupo: 'operacao',
     titulo: 'Monitor/acompanhante a bordo (quando exigido pelo Município)',
     frase: 'ausência de monitor acompanhante, exigido pela norma municipal',
@@ -903,6 +996,7 @@ const ITENS = [
   },
   {
     id: 'itinerario',
+    curto: 'Itinerário',
     grupo: 'operacao',
     titulo: 'Itinerário e pontos de embarque conforme o autorizado',
     frase: 'operação em itinerário diverso do autorizado',
@@ -911,6 +1005,7 @@ const ITENS = [
   },
   {
     id: 'carga_carona',
+    curto: 'Carga/carona',
     grupo: 'operacao',
     titulo: 'Ausência de transporte de carga ou de passageiros estranhos ao serviço',
     frase: 'transporte de carga ou de passageiros estranhos ao serviço escolar',
@@ -977,16 +1072,21 @@ async function comprimir(file) {
   return blob || file;
 }
 
-async function salvarFotos(files, { veiculoId, fiscalizacaoId, itemId = null }) {
+/** Tipos usados para nomear as fotos no pacote entregue à IA. */
+const TIPOS_FOTO = ['documento', 'placa', 'faixa', 'interior', 'irregularidade', 'outra'];
+
+async function salvarFotos(files, { veiculoId, fiscalizacaoId, itemId = null, tipo = 'outra' }) {
   const salvas = [];
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue;
     const blob = await comprimir(file);
     const foto = {
       id: uid('foto'),
+      origemId: uid('foto'),
       veiculoId,
       fiscalizacaoId,
       itemId,
+      tipo,
       blob,
       legenda: '',
       criadoEm: new Date().toISOString(),
@@ -1504,7 +1604,7 @@ async function montarRelatorio(fisc, veiculos, opts = {}) {
                        .map(
                          (f, j) => `<figure>
                             <img src="${f.url}" alt="Veículo ${num2(v.ordem || i + 1)} foto ${j + 1}">
-                            <figcaption>Foto ${j + 1}${f.legenda ? ` — ${esc(f.legenda)}` : ''}</figcaption>
+                            <figcaption>Foto ${j + 1}${f.tipo && f.tipo !== 'outra' ? ` — ${esc(f.tipo)}` : ''}${f.legenda ? ` — ${esc(f.legenda)}` : ''}</figcaption>
                           </figure>`
                        )
                        .join('')}
@@ -1770,6 +1870,306 @@ async function compartilharOuBaixar(conteudo, nome, tipo) {
   if (await salvarPelaPagina(blob, nome)) return 'salvo';
   baixarArquivo(blob, nome, tipo);
   return 'baixado';
+}
+
+
+// ===================== js/pacote.js =====================
+
+/**
+ * Pacote da fiscalização para leitura por inteligência artificial.
+ *
+ * Gera um .zip com as fotografias nomeadas de forma previsível, os dados
+ * estruturados em JSON e um resumo em texto. É o formato para entregar a um
+ * assistente que vá extrair dados dos documentos fotografados (CNH, CRLV,
+ * autorização) ou redigir peças a partir do apurado.
+ *
+ * O .zip é escrito aqui mesmo, sem biblioteca externa: os arquivos entram sem
+ * compressão (JPEG já é comprimido) usando o formato ZIP mais simples.
+ */
+
+
+// ------------------------------------------------------------------- zip
+
+const TABELA_CRC = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) c = TABELA_CRC[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function dataDos(d = new Date()) {
+  const hora = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xffff;
+  const dia = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xffff;
+  return { hora, dia };
+}
+
+/** @param arquivos [{nome: string, dados: Uint8Array}] */
+function zip(arquivos) {
+  const codificador = new TextEncoder();
+  const { hora, dia } = dataDos();
+  const partes = [];
+  const central = [];
+  let deslocamento = 0;
+
+  for (const { nome, dados } of arquivos) {
+    const nomeBytes = codificador.encode(nome);
+    const crc = crc32(dados);
+
+    const cabecalho = new DataView(new ArrayBuffer(30));
+    cabecalho.setUint32(0, 0x04034b50, true);
+    cabecalho.setUint16(4, 20, true); // versão necessária
+    cabecalho.setUint16(6, 0x0800, true); // nomes em UTF-8
+    cabecalho.setUint16(8, 0, true); // sem compressão
+    cabecalho.setUint16(10, hora, true);
+    cabecalho.setUint16(12, dia, true);
+    cabecalho.setUint32(14, crc, true);
+    cabecalho.setUint32(18, dados.length, true);
+    cabecalho.setUint32(22, dados.length, true);
+    cabecalho.setUint16(26, nomeBytes.length, true);
+    cabecalho.setUint16(28, 0, true);
+    partes.push(new Uint8Array(cabecalho.buffer), nomeBytes, dados);
+
+    const registro = new DataView(new ArrayBuffer(46));
+    registro.setUint32(0, 0x02014b50, true);
+    registro.setUint16(4, 20, true);
+    registro.setUint16(6, 20, true);
+    registro.setUint16(8, 0x0800, true);
+    registro.setUint16(10, 0, true);
+    registro.setUint16(12, hora, true);
+    registro.setUint16(14, dia, true);
+    registro.setUint32(16, crc, true);
+    registro.setUint32(20, dados.length, true);
+    registro.setUint32(24, dados.length, true);
+    registro.setUint16(28, nomeBytes.length, true);
+    registro.setUint32(42, deslocamento, true);
+    central.push(new Uint8Array(registro.buffer), nomeBytes);
+
+    deslocamento += 30 + nomeBytes.length + dados.length;
+  }
+
+  const tamanhoCentral = central.reduce((s, p) => s + p.length, 0);
+  const fim = new DataView(new ArrayBuffer(22));
+  fim.setUint32(0, 0x06054b50, true);
+  fim.setUint16(8, arquivos.length, true);
+  fim.setUint16(10, arquivos.length, true);
+  fim.setUint32(12, tamanhoCentral, true);
+  fim.setUint32(16, deslocamento, true);
+
+  return new Blob([...partes, ...central, new Uint8Array(fim.buffer)], { type: 'application/zip' });
+}
+
+// ---------------------------------------------------------------- pacote
+
+function semAcento(txt) {
+  return String(txt || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+}
+
+const doisDigitos = (n) => String(n).padStart(2, '0');
+
+/** Dados de um veículo já traduzidos para leitura por terceiros. */
+function veiculoParaPacote(v, fotos) {
+  const irr = irregularidades(v);
+  return {
+    ordem: v.ordem,
+    placa: formatarPlaca(v.placa),
+    tipo: v.tipo,
+    marcaModelo: v.marcaModelo || null,
+    ano: v.ano || null,
+    cor: v.cor || null,
+    lotacao: v.lotacao || null,
+    escolaresABordo: v.alunosBordo || null,
+    permissionario: v.permissionario || null,
+    rotaEscola: v.escolaRota || null,
+    condutor: {
+      nome: v.condutorNome || null,
+      cpf: v.condutorCpf || null,
+      cnh: v.condutorCnh || null,
+      categoriaCnh: v.condutorCategoria || null,
+      validadeCnh: v.condutorValidadeCnh || null,
+      telefone: v.condutorTelefone || null,
+    },
+    monitor: { presente: !!v.monitorPossui, nome: v.monitorNome || null },
+    irregularidades: irr.map(({ item, obs }) => ({
+      id: item.id,
+      titulo: item.titulo,
+      fraseParaRelatorio: item.frase,
+      baseLegal: item.base,
+      natureza: GRAVIDADE_LABEL[item.gravidade] || null,
+      detalhe: obs || null,
+    })),
+    observacoesFinais: frasesIrregularidades(v),
+    observacoesLivres: v.obsGerais || null,
+    autuado: !!v.autuado,
+    numeroAutuacao: v.autuacaoNumero || null,
+    medidaAdotada: v.medida || null,
+    agente: v.inspetor || null,
+    coordenadas: v.geo ? { latitude: v.geo.lat, longitude: v.geo.lng } : null,
+    registradoEm: v.criadoEm,
+    atualizadoEm: v.atualizadoEm,
+    fotos: fotos.map((f) => f.arquivo),
+  };
+}
+
+const INSTRUCOES = `# Instruções para o assistente
+
+Este pacote é o produto de uma fiscalização de transporte escolar conduzida pelo
+Ministério Público, com apoio da Polícia Militar.
+
+## Conteúdo
+
+- \`dados.json\` — todos os dados coletados em campo, um objeto por veículo,
+  com as irregularidades já classificadas e a base legal de cada uma.
+- \`resumo.md\` — a mesma informação em texto corrido.
+- \`fotos/\` — as fotografias, nomeadas como
+  \`veiculo-NN_PLACA_tipo_i.jpg\`. O trecho \`tipo\` indica o que o agente
+  registrou: \`documento\`, \`placa\`, \`faixa\`, \`interior\`, \`irregularidade\`
+  ou \`outra\`.
+
+## Tarefas usuais
+
+1. **Extrair dados dos documentos**: nas fotos marcadas como \`documento\`, ler
+   CNH (número, categoria, validade, nome e CPF do condutor), CRLV (placa,
+   RENAVAM, marca/modelo, ano, categoria) e a autorização para transporte
+   escolar. Devolver em JSON, indicando o arquivo de origem de cada campo.
+2. **Conferir contra o coletado**: comparar o que foi lido com os campos de
+   \`dados.json\` e apontar divergências, em vez de sobrescrever.
+3. **Não inventar**: campo ilegível deve voltar como \`null\`, com a observação
+   de que a foto não permite a leitura. Trata-se de instrução de documento
+   oficial — dado presumido compromete o relatório.
+
+## Cuidado
+
+O material contém dados pessoais (nome, CPF, CNH, imagem). Trate-o conforme a
+LGPD e as normas de sigilo do Ministério Público.
+`;
+
+function resumoMarkdown(fisc, veiculos, stats) {
+  const linhas = [];
+  linhas.push(`# Fiscalização do transporte escolar — ${fisc.municipio || 'município não informado'}`);
+  linhas.push('');
+  linhas.push(`- Relatório nº ${fisc.numero}/${fisc.ano}`);
+  linhas.push(`- Data: ${dataCurta(fisc.data)} às ${fisc.hora}`);
+  if (fisc.local) linhas.push(`- Local: ${fisc.local}`);
+  linhas.push(`- Promotoria: ${fisc.promotoria}`);
+  linhas.push(`- Veículos fiscalizados: ${stats.totalVeiculos}`);
+  linhas.push(`- Veículos com irregularidade: ${stats.irregulares}`);
+  linhas.push(`- Total de irregularidades: ${stats.totalIrregularidades}`);
+  linhas.push('');
+  linhas.push('## Irregularidades por incidência');
+  linhas.push('');
+  linhas.push('| Irregularidade | Base legal | Veículos |');
+  linhas.push('| --- | --- | --- |');
+  for (const r of stats.ranking) linhas.push(`| ${r.item.titulo} | ${r.item.base} | ${r.qtd} |`);
+  linhas.push('');
+  linhas.push('## Veículos');
+  for (const v of veiculos) {
+    linhas.push('');
+    linhas.push(`### Veículo ${doisDigitos(v.ordem)} — ${formatarPlaca(v.placa) || 'sem placa'}`);
+    const ident = [v.tipo, v.marcaModelo, v.ano].filter(Boolean).join(' — ');
+    if (ident) linhas.push(`- Veículo: ${ident}`);
+    if (v.condutorNome) linhas.push(`- Condutor: ${v.condutorNome}`);
+    if (v.permissionario) linhas.push(`- Permissionário: ${v.permissionario}`);
+    if (v.escolaRota) linhas.push(`- Rota/escola: ${v.escolaRota}`);
+    linhas.push(`- Observações: ${frasesIrregularidades(v)}`);
+    if (v.autuado) linhas.push(`- Auto de infração: ${v.autuacaoNumero || 'lavrado'}`);
+    if (v.medida && v.medida !== 'Liberado') linhas.push(`- Medida: ${v.medida}`);
+  }
+  return linhas.join('\n');
+}
+
+/**
+ * Monta o pacote completo.
+ * @returns {{blob: Blob, nome: string, arquivos: number, fotos: number}}
+ */
+async function gerarPacoteIA(fisc, veiculos, { comFotos = true } = {}) {
+  const codificador = new TextEncoder();
+  const stats = consolidar(veiculos);
+  const arquivos = [];
+
+  // Fotos, nomeadas de modo que o assistente saiba o que está vendo.
+  const porVeiculo = new Map();
+  if (comFotos) {
+    const todas = await fotosDaFiscalizacao(fisc.id);
+    for (const f of todas) {
+      if (!porVeiculo.has(f.veiculoId)) porVeiculo.set(f.veiculoId, []);
+      porVeiculo.get(f.veiculoId).push(f);
+    }
+    for (const v of veiculos) {
+      const lista = (porVeiculo.get(v.id) || []).sort((a, b) => (a.criadoEm || '').localeCompare(b.criadoEm || ''));
+      const marcadas = [];
+      let i = 1;
+      for (const f of lista) {
+        const nome = `fotos/veiculo-${doisDigitos(v.ordem)}_${semAcento(v.placa) || 'sem-placa'}_${semAcento(f.tipo) || 'outra'}_${i}.jpg`;
+        arquivos.push({ nome, dados: new Uint8Array(await f.blob.arrayBuffer()) });
+        marcadas.push({ arquivo: nome, tipo: f.tipo || 'outra', legenda: f.legenda || null });
+        i += 1;
+      }
+      porVeiculo.set(v.id, marcadas);
+    }
+  }
+
+  const dados = {
+    formato: 'fiscalizacao-transporte-escolar/pacote-ia/1',
+    geradoEm: new Date().toISOString(),
+    fiscalizacao: {
+      numero: fisc.numero,
+      ano: fisc.ano,
+      data: fisc.data,
+      hora: fisc.hora,
+      municipio: fisc.municipio,
+      local: fisc.local || null,
+      orgao: fisc.orgaoMp,
+      promotoria: fisc.promotoria,
+      promotor: fisc.promotor || null,
+      apoio: fisc.apoio || null,
+      equipe: fisc.equipe || null,
+    },
+    resumo: {
+      veiculosFiscalizados: stats.totalVeiculos,
+      veiculosComIrregularidade: stats.irregulares,
+      totalIrregularidades: stats.totalIrregularidades,
+      veiculosAutuados: stats.autuados,
+      porIncidencia: stats.ranking.map((r) => ({
+        id: r.item.id,
+        titulo: r.item.titulo,
+        baseLegal: r.item.base,
+        veiculos: r.qtd,
+      })),
+    },
+    catalogoDeItens: ITENS.map((i) => ({
+      id: i.id,
+      titulo: i.titulo,
+      baseLegal: i.base,
+      natureza: GRAVIDADE_LABEL[i.gravidade] || null,
+    })),
+    veiculos: veiculos.map((v) => veiculoParaPacote(v, porVeiculo.get(v.id) || [])),
+  };
+
+  arquivos.push({ nome: 'dados.json', dados: codificador.encode(JSON.stringify(dados, null, 2)) });
+  arquivos.push({ nome: 'resumo.md', dados: codificador.encode(resumoMarkdown(fisc, veiculos, stats)) });
+  arquivos.push({ nome: 'instrucoes-para-a-ia.md', dados: codificador.encode(INSTRUCOES) });
+
+  const nome = `fiscalizacao-${fisc.numero}-${fisc.ano}-${semAcento(fisc.municipio) || 'municipio'}-pacote-ia.zip`;
+  return {
+    blob: zip(arquivos),
+    nome,
+    arquivos: arquivos.length,
+    fotos: arquivos.filter((a) => a.nome.startsWith('fotos/')).length,
+  };
 }
 
 
@@ -2551,7 +2951,7 @@ async function pendencias(fisc) {
 
 
 // namespaces equivalentes aos "import * as"
-const fotosApi = { comprimir, salvarFotos, fotosDoVeiculo, fotosDaFiscalizacao, excluirFoto, atualizarFoto, blobParaDataURL, dataURLParaBlob };
+const fotosApi = { comprimir, TIPOS_FOTO, salvarFotos, fotosDoVeiculo, fotosDaFiscalizacao, excluirFoto, atualizarFoto, blobParaDataURL, dataURLParaBlob };
 const store = { novaFiscalizacao, salvarFiscalizacao, listarFiscalizacoes, obterFiscalizacao, excluirFiscalizacao, idFiscalizacaoAtual, definirFiscalizacaoAtual, inspetorAtual, definirInspetor, novoVeiculo, salvarVeiculo, obterVeiculo, listarVeiculos, excluirVeiculo, proximaOrdem, renumerar, normalizarPlaca, placaValida, formatarPlaca, irregularidades, contarIrregularidades, itensVerificados, frasesIrregularidades, consolidar, mesclarVeiculos };
 const backup = { exportar, importar, baixarArquivo, compartilharOuBaixar };
 const nuvem = { configNuvem, definirConfigNuvem, nuvemConfigurada, codigoPadrao, aplicarConfigDaURL, linkConfiguracao, servidorEmUso, chaveVeiculo, criarSala, entrarSala, sairSala, marcarRemocao, estaSincronizando, sincronizar, painel, pendencias };
@@ -2935,13 +3335,17 @@ async function viewVeiculo(id) {
       <h3>Registro fotográfico</h3>
       <p class="ajuda">Registre, no mínimo: a placa, a lateral com a faixa ESCOLAR, o interior (cintos) e cada irregularidade constatada.</p>
       <div class="acoes">
-        <label class="btn primario arquivo">📷 Tirar foto
+        <label class="btn primario arquivo">📄 Documento
+          <input type="file" accept="image/*" capture="environment" multiple hidden id="cam-doc">
+        </label>
+        <label class="btn primario arquivo">📷 Veículo
           <input type="file" accept="image/*" capture="environment" multiple hidden id="cam">
         </label>
-        <label class="btn arquivo">🖼 Da galeria
+        <label class="btn arquivo">🖼 Galeria
           <input type="file" accept="image/*" multiple hidden id="gal">
         </label>
       </div>
+      <p class="ajuda">O botão usado já classifica a foto (documento ou veículo) — isso permite que a IA leia depois CNH, CRLV e autorização. Dá para corrigir a classificação em cada imagem.</p>
       <div class="grade-fotos" id="grade-fotos">
         ${fotos.map((f) => fotoHTML(f)).join('') || '<p class="vazio">Nenhuma foto.</p>'}
       </div>
@@ -2964,13 +3368,8 @@ async function viewVeiculo(id) {
       ${campo('Nome do monitor', 'v_monitorNome', v.monitorNome)}
     </section>
 
-    <section class="cartao">
-      <div class="cartao-topo">
-        <h3>Checklist</h3>
-        <button class="btn pequeno" id="tudo-conforme">✓ Tudo conforme</button>
-      </div>
-      <p class="ajuda">Marque <b>IRREG.</b> apenas no que estiver em desacordo — o texto do relatório é montado automaticamente.</p>
-      ${GRUPOS.map((g) => grupoHTML(g, v)).join('')}
+    <section class="cartao" id="secao-checklist">
+      ${checklistHTML(v)}
     </section>
 
     <section class="cartao">
@@ -2996,6 +3395,134 @@ async function viewVeiculo(id) {
 
   ligarFichaVeiculo(v);
   atualizarResumoIrr(v);
+}
+
+// ------------------------------------------------- checklist: modo rápido
+
+function modoChecklist() {
+  return localStorage.getItem('fte:modoChecklist') || 'rapido';
+}
+
+/**
+ * Em campo o agente não percorre 34 itens: ele olha o veículo e aponta o que
+ * está errado. O modo rápido reflete isso — um toque marca a irregularidade, e
+ * só o que foi marcado pede detalhe. O modo completo continua disponível para
+ * quando se quiser atestar item a item.
+ */
+function checklistHTML(v) {
+  const rapido = modoChecklist() === 'rapido';
+  const cabecalho = `
+    <div class="cartao-topo">
+      <h3>Checklist</h3>
+      <div class="alternador">
+        <button class="op ${rapido ? 'sel' : ''}" data-modo="rapido">Rápido</button>
+        <button class="op ${rapido ? '' : 'sel'}" data-modo="completo">Completo</button>
+      </div>
+    </div>`;
+
+  if (!rapido) {
+    return `${cabecalho}
+      <p class="ajuda">Marque <b>IRREG.</b> apenas no que estiver em desacordo — o texto do relatório é montado automaticamente.</p>
+      <button class="btn pequeno" id="tudo-conforme">✓ Marcar pendentes como conformes</button>
+      ${GRUPOS.map((g) => grupoHTML(g, v)).join('')}`;
+  }
+
+  const frequentes = ITENS.filter((i) => i.frequente);
+  const demais = ITENS.filter((i) => !i.frequente);
+  return `${cabecalho}
+    <p class="ajuda">Toque apenas no que estiver <b>irregular</b>. O que não for tocado não vai ao relatório.</p>
+    <input class="busca" id="filtro-itens" type="search" placeholder="Buscar item (faixa, cinto, tacógrafo…)">
+    <div class="chips" id="chips-frequentes">${chipsHTML(frequentes, v)}</div>
+    <details class="grupo mais-itens" id="mais-itens">
+      <summary><span>➕ Demais itens (${demais.length})</span></summary>
+      <div class="chips">${chipsHTML(demais, v)}</div>
+    </details>
+    <div id="marcados">${marcadosHTML(v)}</div>
+    <button class="btn pequeno" id="tudo-conforme">✓ Atestar os demais itens como conformes</button>`;
+}
+
+function chipsHTML(itens, v) {
+  return itens
+    .map((i) => {
+      const marcado = v.itens?.[i.id]?.status === 'irregular';
+      const busca = `${i.curto} ${i.titulo} ${i.frase}`.toLowerCase();
+      return `<button type="button" class="chip ${marcado ? 'sel' : ''}" data-chip="${i.id}"
+        data-busca="${esc(busca)}" title="${esc(i.titulo)}">${esc(i.curto)}</button>`;
+    })
+    .join('');
+}
+
+function marcadosHTML(v) {
+  const marcados = store.irregularidades(v);
+  if (!marcados.length) return '<p class="ajuda">Nenhuma irregularidade marcada.</p>';
+  return `
+    <div class="lista-marcados">
+      ${marcados
+        .map(
+          ({ item, obs }) => `
+        <div class="marcado" data-marcado="${item.id}">
+          <div class="marcado-topo">
+            <b>${esc(item.titulo)}</b>
+            <button class="btn icone perigo" data-desmarcar="${item.id}" aria-label="Desmarcar">✕</button>
+          </div>
+          <small>${esc(item.base || '')}</small>
+          <input class="obs-item" type="text" value="${esc(obs)}"
+            placeholder="Detalhe (opcional): ex. lâmpada traseira esquerda queimada">
+        </div>`
+        )
+        .join('')}
+    </div>`;
+}
+
+function ligarChecklistRapido(v, salvar) {
+  const redesenharMarcados = () => {
+    document.getElementById('marcados').innerHTML = marcadosHTML(v);
+    ligarMarcados(v, salvar, redesenharMarcados);
+    atualizarResumoIrr(v);
+  };
+
+  app.querySelectorAll('[data-chip]').forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.chip;
+      const marcado = v.itens?.[id]?.status === 'irregular';
+      marcarItem(v, id, marcado ? '' : 'irregular');
+      btn.classList.toggle('sel', !marcado);
+      salvar();
+      redesenharMarcados();
+    };
+  });
+
+  const filtro = document.getElementById('filtro-itens');
+  filtro.oninput = () => {
+    const termo = filtro.value.toLowerCase().trim();
+    app.querySelectorAll('[data-chip]').forEach((c) => {
+      c.style.display = !termo || c.dataset.busca.includes(termo) ? '' : 'none';
+    });
+    if (termo) document.getElementById('mais-itens').open = true;
+  };
+
+  ligarMarcados(v, salvar, redesenharMarcados);
+}
+
+function ligarMarcados(v, salvar, redesenhar) {
+  app.querySelectorAll('[data-desmarcar]').forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.desmarcar;
+      marcarItem(v, id, '');
+      const chip = app.querySelector(`[data-chip="${id}"]`);
+      if (chip) chip.classList.remove('sel');
+      salvar();
+      redesenhar();
+    };
+  });
+  app.querySelectorAll('.marcado .obs-item').forEach((campo) => {
+    const id = campo.closest('.marcado').dataset.marcado;
+    campo.addEventListener('input', () => {
+      marcarItem(v, id, 'irregular', campo.value);
+      salvar();
+      atualizarResumoIrr(v);
+    });
+  });
 }
 
 function grupoHTML(grupo, v) {
@@ -3040,6 +3567,11 @@ function fotoHTML(f) {
   return `
     <figure class="foto" data-foto="${f.id}">
       <img src="${objURL(f.blob)}" alt="Foto do veículo" loading="lazy">
+      <select class="tipo-foto" aria-label="Tipo da foto">
+        ${TIPOS_FOTO.map(
+          (t) => `<option value="${t}" ${(f.tipo || 'outra') === t ? 'selected' : ''}>${t.charAt(0).toUpperCase()}${t.slice(1)}</option>`
+        ).join('')}
+      </select>
       <input class="legenda" type="text" placeholder="Legenda" value="${esc(f.legenda || '')}">
       <button class="btn icone perigo apagar" aria-label="Excluir foto">🗑</button>
     </figure>`;
@@ -3121,7 +3653,18 @@ function ligarFichaVeiculo(v) {
   });
   validarPlaca();
 
-  // checklist
+  // checklist — alternador de modo
+  app.querySelectorAll('[data-modo]').forEach((b) => {
+    b.onclick = async () => {
+      localStorage.setItem('fte:modoChecklist', b.dataset.modo);
+      await salvarAgora();
+      await viewVeiculo(v.id);
+    };
+  });
+
+  if (modoChecklist() === 'rapido') ligarChecklistRapido(v, salvar);
+
+  // checklist — modo completo
   app.querySelectorAll('.item-check').forEach((div) => {
     const itemId = div.dataset.item;
     div.querySelectorAll('.op').forEach((btn) => {
@@ -3152,18 +3695,19 @@ function ligarFichaVeiculo(v) {
     toast('Itens pendentes marcados como conformes.');
   };
 
-  // fotos
-  const receber = async (input) => {
+  // fotos — o botão usado define o tipo, que orienta a leitura posterior por IA
+  const receber = async (input, tipo) => {
     const arquivos = [...input.files];
     input.value = '';
     if (!arquivos.length) return;
     toast(`Processando ${arquivos.length} foto(s)…`);
-    await fotosApi.salvarFotos(arquivos, { veiculoId: v.id, fiscalizacaoId: v.fiscalizacaoId });
+    await fotosApi.salvarFotos(arquivos, { veiculoId: v.id, fiscalizacaoId: v.fiscalizacaoId, tipo });
     await recarregarFotos(v);
     toast('Foto(s) salva(s).');
   };
-  document.getElementById('cam').onchange = (e) => receber(e.target);
-  document.getElementById('gal').onchange = (e) => receber(e.target);
+  document.getElementById('cam-doc').onchange = (e) => receber(e.target, 'documento');
+  document.getElementById('cam').onchange = (e) => receber(e.target, 'placa');
+  document.getElementById('gal').onchange = (e) => receber(e.target, 'outra');
   ligarFotos(v);
 
   document.getElementById('geo').onclick = () => {
@@ -3209,17 +3753,18 @@ function ligarFotos(v) {
       await fotosApi.excluirFoto(id);
       await recarregarFotos(v);
     };
+    const alterarFoto = async (mudanca) => {
+      const fotos = await fotosApi.fotosDoVeiculo(v.id);
+      const f = fotos.find((x) => x.id === id);
+      if (!f) return;
+      Object.assign(f, mudanca);
+      await fotosApi.atualizarFoto(f);
+    };
     fig.querySelector('.legenda').addEventListener(
       'input',
-      debounce(async (e) => {
-        const fotos = await fotosApi.fotosDoVeiculo(v.id);
-        const f = fotos.find((x) => x.id === id);
-        if (f) {
-          f.legenda = e.target.value;
-          await fotosApi.atualizarFoto(f);
-        }
-      }, 400)
+      debounce((e) => alterarFoto({ legenda: e.target.value }), 400)
     );
+    fig.querySelector('.tipo-foto').onchange = (e) => alterarFoto({ tipo: e.target.value });
     fig.querySelector('img').onclick = () => abrirVisualizador(fig.querySelector('img').src);
   });
 }
@@ -3260,6 +3805,7 @@ function atualizarResumoIrr(v) {
 }
 
 function atualizarSelosGrupos(v) {
+  if (modoChecklist() === 'rapido') return;
   app.querySelectorAll('.grupo').forEach((det, idx) => {
     const grupo = GRUPOS[idx];
     if (!grupo) return;
@@ -3306,6 +3852,7 @@ async function viewRelatorio() {
         <button class="btn grande" id="imprimir">🖨 Imprimir / salvar PDF</button>
         <button class="btn" id="doc">📝 Baixar .doc (Word)</button>
         <button class="btn" id="csv">📊 Baixar planilha (CSV)</button>
+        <button class="btn" id="pacote">🤖 Pacote para IA (.zip)</button>
       </div>
     </section>
     <section class="cartao previa">
@@ -3345,6 +3892,13 @@ async function viewRelatorio() {
       nome,
       'application/msword'
     );
+  };
+
+  document.getElementById('pacote').onclick = async () => {
+    toast('Montando o pacote — pode levar alguns segundos…');
+    const r = await gerarPacoteIA(fisc, veiculos, { comFotos: comFotos() });
+    await backup.compartilharOuBaixar(r.blob, r.nome, 'application/zip');
+    toast(`Pacote com ${r.fotos} foto(s) e os dados estruturados.`);
   };
 
   document.getElementById('csv').onclick = async () => {

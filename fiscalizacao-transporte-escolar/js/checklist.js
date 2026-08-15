@@ -26,6 +26,8 @@ export const ITENS = [
   // ---------------------------------------------------------------- condutor
   {
     id: 'cnh_categoria',
+    curto: 'CNH cat. D',
+    frequente: true,
     grupo: 'condutor',
     titulo: 'CNH categoria D (ou superior)',
     ajuda: 'Conferir a categoria impressa na CNH. Categorias C ou B não autorizam o transporte escolar.',
@@ -35,6 +37,7 @@ export const ITENS = [
   },
   {
     id: 'cnh_validade',
+    curto: 'CNH vencida',
     grupo: 'condutor',
     titulo: 'CNH dentro da validade',
     frase: 'CNH vencida',
@@ -43,6 +46,8 @@ export const ITENS = [
   },
   {
     id: 'cete',
+    curto: 'Curso CETE',
+    frequente: true,
     grupo: 'condutor',
     titulo: 'Curso especializado de transporte escolar (CETE)',
     ajuda: 'Certificado do curso especializado, nos termos da regulamentação do CONTRAN.',
@@ -52,6 +57,8 @@ export const ITENS = [
   },
   {
     id: 'autorizacao',
+    curto: 'Autorização',
+    frequente: true,
     grupo: 'condutor',
     titulo: 'Autorização para exercer a atividade de condutor escolar',
     ajuda: 'Autorização expedida pelo órgão executivo de trânsito / poder concedente.',
@@ -61,6 +68,7 @@ export const ITENS = [
   },
   {
     id: 'autorizacao_afixada',
+    curto: 'Autorização afixada',
     grupo: 'condutor',
     titulo: 'Autorização afixada no interior do veículo, com a lotação',
     frase: 'autorização não afixada na parte interna do veículo em local visível',
@@ -69,6 +77,8 @@ export const ITENS = [
   },
   {
     id: 'psicotecnico',
+    curto: 'Psicotécnico',
+    frequente: true,
     grupo: 'condutor',
     titulo: 'Exame psicotécnico específico vigente',
     frase: 'ausência de exame psicotécnico para transporte escolar',
@@ -77,6 +87,7 @@ export const ITENS = [
   },
   {
     id: 'matricula_detran',
+    curto: 'Matrícula DETRAN',
     grupo: 'condutor',
     titulo: 'Matrícula/cadastro do condutor no DETRAN',
     frase: 'ausência de matrícula no DETRAN',
@@ -85,6 +96,7 @@ export const ITENS = [
   },
   {
     id: 'idade_21',
+    curto: 'Idade < 21',
     grupo: 'condutor',
     titulo: 'Condutor maior de 21 anos',
     frase: 'condutor com idade inferior a 21 anos',
@@ -93,6 +105,7 @@ export const ITENS = [
   },
   {
     id: 'prontuario',
+    curto: 'Prontuário',
     grupo: 'condutor',
     titulo: 'Prontuário sem infração grave/gravíssima nos últimos 12 meses',
     ajuda: 'Também impede a atividade a reincidência em infrações médias no período.',
@@ -104,6 +117,8 @@ export const ITENS = [
   // ----------------------------------------------------------------- veículo
   {
     id: 'crlv',
+    curto: 'CRLV',
+    frequente: true,
     grupo: 'veiculo',
     titulo: 'CRLV vigente',
     frase: 'veículo sem CRLV vigente',
@@ -112,6 +127,7 @@ export const ITENS = [
   },
   {
     id: 'registro_passageiros',
+    curto: 'Registro passageiros',
     grupo: 'veiculo',
     titulo: 'Registro como veículo de passageiros',
     frase: 'veículo não registrado na categoria de transporte de passageiros',
@@ -120,6 +136,8 @@ export const ITENS = [
   },
   {
     id: 'inspecao_semestral',
+    curto: 'Inspeção semestral',
+    frequente: true,
     grupo: 'veiculo',
     titulo: 'Inspeção semestral de segurança em dia',
     ajuda: 'Vistoria semestral dos equipamentos obrigatórios e de segurança.',
@@ -129,6 +147,7 @@ export const ITENS = [
   },
   {
     id: 'cadastro_municipal',
+    curto: 'Cadastro municipal',
     grupo: 'veiculo',
     titulo: 'Cadastro/permissão municipal para o transporte escolar',
     ajuda: 'Exigências próprias do Município (art. 139 do CTB).',
@@ -138,6 +157,7 @@ export const ITENS = [
   },
   {
     id: 'contrato_prefeitura',
+    curto: 'Contrato prefeitura',
     grupo: 'veiculo',
     titulo: 'Contrato/credenciamento com a Prefeitura (serviço terceirizado)',
     frase: 'veículo sem contrato ou credenciamento válido junto à Administração Municipal',
@@ -146,6 +166,7 @@ export const ITENS = [
   },
   {
     id: 'seguro',
+    curto: 'Seguro',
     grupo: 'veiculo',
     titulo: 'Seguro obrigatório/contratual em vigor',
     frase: 'ausência de comprovação de seguro em vigor',
@@ -156,6 +177,8 @@ export const ITENS = [
   // ------------------------------------------------------------ equipamentos
   {
     id: 'faixa_escolar',
+    curto: 'Faixa ESCOLAR',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Faixa amarela horizontal com o dístico "ESCOLAR"',
     ajuda: 'Faixa de 40 cm de largura, à meia altura, nas laterais e na traseira, com o dístico ESCOLAR em preto.',
@@ -165,6 +188,8 @@ export const ITENS = [
   },
   {
     id: 'tacografo',
+    curto: 'Tacógrafo',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Tacógrafo instalado e em funcionamento',
     ajuda: 'Registrador instantâneo inalterável de velocidade e tempo.',
@@ -174,6 +199,8 @@ export const ITENS = [
   },
   {
     id: 'tacografo_laudo',
+    curto: 'Laudo tacógrafo',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Laudo/aferição do tacógrafo vigente',
     frase: 'ausência de laudo de aferição do tacógrafo',
@@ -182,6 +209,8 @@ export const ITENS = [
   },
   {
     id: 'cintos',
+    curto: 'Cintos',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Cintos de segurança para todos os passageiros',
     ajuda: 'Em número igual à lotação e em condições de uso.',
@@ -191,6 +220,7 @@ export const ITENS = [
   },
   {
     id: 'lanternas',
+    curto: 'Lanternas',
     grupo: 'equipamentos',
     titulo: 'Lanternas dianteiras (branca/âmbar) e traseiras (vermelhas)',
     frase: 'ausência das lanternas obrigatórias de identificação do transporte escolar',
@@ -199,6 +229,8 @@ export const ITENS = [
   },
   {
     id: 'iluminacao',
+    curto: 'Iluminação',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Sistema de iluminação original e em funcionamento',
     ajuda: 'Verificar faróis, lanternas, luz de freio e setas; anotar alterações e lâmpadas queimadas.',
@@ -208,6 +240,7 @@ export const ITENS = [
   },
   {
     id: 'farois_ligados',
+    curto: 'Faróis apagados',
     grupo: 'equipamentos',
     titulo: 'Faróis acesos durante a circulação',
     frase: 'circulação sem os faróis acesos',
@@ -216,6 +249,8 @@ export const ITENS = [
   },
   {
     id: 'placas',
+    curto: 'Placa ilegível',
+    frequente: true,
     grupo: 'equipamentos',
     titulo: 'Placas de identificação legíveis e visíveis',
     frase: 'placa de identificação ilegível',
@@ -224,6 +259,7 @@ export const ITENS = [
   },
   {
     id: 'equip_contran',
+    curto: 'Equip. CONTRAN',
     grupo: 'equipamentos',
     titulo: 'Demais equipamentos obrigatórios conforme o CONTRAN',
     ajuda: 'Extintor (quando exigido), saída de emergência, martelo, sinalização de emergência, estepe, etc.',
@@ -233,6 +269,7 @@ export const ITENS = [
   },
   {
     id: 'saida_emergencia',
+    curto: 'Saída emergência',
     grupo: 'equipamentos',
     titulo: 'Saída de emergência sinalizada e desobstruída',
     frase: 'saída de emergência obstruída ou sem sinalização',
@@ -243,6 +280,7 @@ export const ITENS = [
   // ------------------------------------------------------------- conservação
   {
     id: 'pneus',
+    curto: 'Pneus',
     grupo: 'conservacao',
     titulo: 'Pneus em condições de uso',
     ajuda: 'Sulco mínimo de 1,6 mm, sem bolhas, cortes ou deformações; verificar o estepe.',
@@ -252,6 +290,8 @@ export const ITENS = [
   },
   {
     id: 'parabrisa',
+    curto: 'Para-brisa',
+    frequente: true,
     grupo: 'conservacao',
     titulo: 'Para-brisa e vidros íntegros',
     frase: 'para-brisa trincado',
@@ -260,6 +300,7 @@ export const ITENS = [
   },
   {
     id: 'freios',
+    curto: 'Freios',
     grupo: 'conservacao',
     titulo: 'Sistema de freios em funcionamento',
     frase: 'sistema de freios em desconformidade',
@@ -268,6 +309,7 @@ export const ITENS = [
   },
   {
     id: 'portas_bancos',
+    curto: 'Bancos/portas',
     grupo: 'conservacao',
     titulo: 'Portas, bancos e estruturas internas firmes e íntegros',
     frase: 'bancos, portas ou estruturas internas em más condições',
@@ -276,6 +318,7 @@ export const ITENS = [
   },
   {
     id: 'conservacao_geral',
+    curto: 'Conservação',
     grupo: 'conservacao',
     titulo: 'Estado geral de conservação e limpeza',
     frase: 'veículo em mau estado de conservação, comprometendo a segurança',
@@ -286,6 +329,8 @@ export const ITENS = [
   // ---------------------------------------------------------------- operação
   {
     id: 'lotacao',
+    curto: 'Excesso lotação',
+    frequente: true,
     grupo: 'operacao',
     titulo: 'Número de escolares dentro da lotação autorizada',
     frase: 'transporte de escolares em número superior à lotação permitida',
@@ -294,6 +339,8 @@ export const ITENS = [
   },
   {
     id: 'monitor',
+    curto: 'Sem monitor',
+    frequente: true,
     grupo: 'operacao',
     titulo: 'Monitor/acompanhante a bordo (quando exigido pelo Município)',
     frase: 'ausência de monitor acompanhante, exigido pela norma municipal',
@@ -302,6 +349,7 @@ export const ITENS = [
   },
   {
     id: 'itinerario',
+    curto: 'Itinerário',
     grupo: 'operacao',
     titulo: 'Itinerário e pontos de embarque conforme o autorizado',
     frase: 'operação em itinerário diverso do autorizado',
@@ -310,6 +358,7 @@ export const ITENS = [
   },
   {
     id: 'carga_carona',
+    curto: 'Carga/carona',
     grupo: 'operacao',
     titulo: 'Ausência de transporte de carga ou de passageiros estranhos ao serviço',
     frase: 'transporte de carga ou de passageiros estranhos ao serviço escolar',

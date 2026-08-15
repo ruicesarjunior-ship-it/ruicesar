@@ -29,6 +29,7 @@ const MODULOS = [
   'store.js',
   'relatorio.js',
   'backup.js',
+  'pacote.js',
   'nuvem-firebase.js',
   'nuvem.js',
   'app.js',
@@ -74,6 +75,33 @@ function nomesExportados(codigo) {
 
 const removerExports = (codigo) => codigo.replace(/^export\s+/gm, '').replace(/^export\s*\{[^}]*\};?\s*$/gm, '');
 
+/**
+ * Os módulos viram um escopo único: dois arquivos com a mesma declaração de topo
+ * gerariam um SyntaxError e derrubariam o aplicativo inteiro. Melhor falhar aqui.
+ */
+function conferirColisoes(declaracoes) {
+  const vistos = new Map();
+  const colisoes = [];
+  for (const { arquivo, nomes } of declaracoes) {
+    for (const nome of nomes) {
+      if (vistos.has(nome)) colisoes.push(`${nome} (em ${vistos.get(nome)} e ${arquivo})`);
+      else vistos.set(nome, arquivo);
+    }
+  }
+  if (colisoes.length) {
+    throw new Error(`Declarações repetidas entre módulos — renomeie antes de empacotar:\n  ${colisoes.join('\n  ')}`);
+  }
+}
+
+/** Declarações de primeiro nível (coluna zero) de um módulo. */
+function declaracoesDeTopo(codigo) {
+  const nomes = [];
+  const re = /^(?:async\s+)?(?:function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm;
+  let m;
+  while ((m = re.exec(codigo))) nomes.push(m[1]);
+  return nomes;
+}
+
 /** No arquivo único não existe sw.js ao lado; registrar geraria erro 404. */
 function semServiceWorker(codigo, arquivo) {
   if (arquivo !== 'app.js') return codigo;
@@ -88,8 +116,10 @@ async function principal() {
 
   const partes = [];
   const namespaces = [];
+  const declaracoes = [];
   for (const arquivo of MODULOS) {
     const bruto = await readFile(join(RAIZ, 'js', arquivo), 'utf8');
+    declaracoes.push({ arquivo, nomes: declaracoesDeTopo(removerExports(removerImports(bruto))) });
     const nome = NAMESPACES[arquivo];
     if (nome) {
       const nomes = nomesExportados(bruto);
@@ -101,6 +131,8 @@ async function principal() {
     // Os namespaces precisam existir antes de app.js usá-los.
     if (arquivo === 'nuvem.js') partes.push(`\n// namespaces equivalentes aos "import * as"\n${namespaces.join('\n')}\n`);
   }
+
+  conferirColisoes(declaracoes);
 
   // Corpo da página: o mesmo index.html, sem as referências a arquivos externos.
   const corpo = html

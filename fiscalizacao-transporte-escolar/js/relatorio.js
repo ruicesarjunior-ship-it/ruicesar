@@ -197,7 +197,7 @@ export async function montarRelatorio(fisc, veiculos, opts = {}) {
                        .map(
                          (f, j) => `<figure>
                             <img src="${f.url}" alt="Veículo ${num2(v.ordem || i + 1)} foto ${j + 1}">
-                            <figcaption>Foto ${j + 1}${f.legenda ? ` — ${esc(f.legenda)}` : ''}</figcaption>
+                            <figcaption>Foto ${j + 1}${f.tipo && f.tipo !== 'outra' ? ` — ${esc(f.tipo)}` : ''}${f.legenda ? ` — ${esc(f.legenda)}` : ''}</figcaption>
                           </figure>`
                        )
                        .join('')}

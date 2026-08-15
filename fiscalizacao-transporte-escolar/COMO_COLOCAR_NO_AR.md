@@ -61,10 +61,15 @@ estar liberado para usuários autenticados:
    pelo grupo de WhatsApp. **Mande a senha da operação em mensagem separada.**
 3. **Cada policial**: abre o link → *Adicionar à tela inicial* → aba *Equipe* →
    **Entrar na operação** → digita a senha → aba *Início* → escreve nome e posto.
-4. **Em campo**: *Veículos → Novo*, placa, fotos, checklist, *Salvar e próximo*.
-   Tudo sobe sozinho quando há sinal; sem sinal, fica na fila e sobe depois.
+4. **Em campo**, por veículo: placa → **📄 Documento** (CNH, CRLV, autorização)
+   → **📷 Veículo** (placa, faixa, interior, cada irregularidade) → tocar nos
+   itens irregulares → *Salvar e próximo*. Tudo sobe sozinho quando há sinal;
+   sem sinal, fica na fila.
 5. **No gabinete**: aba *Equipe* → confira o painel; aba *Relatório* → *Gerar* →
    *Imprimir / salvar PDF* ou *Baixar .doc*.
+6. **Para extrair dados com IA**: aba *Relatório* → **🤖 Pacote para IA (.zip)** →
+   entregue o arquivo ao assistente. Ele já vem com as fotos separadas por tipo,
+   os dados estruturados e as instruções de leitura.
 
 ---
 

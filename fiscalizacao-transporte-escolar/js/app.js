@@ -13,6 +13,8 @@
 import { GRUPOS, ITENS, TIPOS_VEICULO, MEDIDAS, GRAVIDADE_LABEL } from './checklist.js';
 import * as store from './store.js';
 import * as fotosApi from './fotos.js';
+import { TIPOS_FOTO } from './fotos.js';
+import { gerarPacoteIA } from './pacote.js';
 import { uso } from './db.js';
 import { montarRelatorio, documentoCompleto, gerarCSV, esc, dataCurta, CSS_RELATORIO } from './relatorio.js';
 import * as backup from './backup.js';
@@ -381,13 +383,17 @@ async function viewVeiculo(id) {
       <h3>Registro fotográfico</h3>
       <p class="ajuda">Registre, no mínimo: a placa, a lateral com a faixa ESCOLAR, o interior (cintos) e cada irregularidade constatada.</p>
       <div class="acoes">
-        <label class="btn primario arquivo">📷 Tirar foto
+        <label class="btn primario arquivo">📄 Documento
+          <input type="file" accept="image/*" capture="environment" multiple hidden id="cam-doc">
+        </label>
+        <label class="btn primario arquivo">📷 Veículo
           <input type="file" accept="image/*" capture="environment" multiple hidden id="cam">
         </label>
-        <label class="btn arquivo">🖼 Da galeria
+        <label class="btn arquivo">🖼 Galeria
           <input type="file" accept="image/*" multiple hidden id="gal">
         </label>
       </div>
+      <p class="ajuda">O botão usado já classifica a foto (documento ou veículo) — isso permite que a IA leia depois CNH, CRLV e autorização. Dá para corrigir a classificação em cada imagem.</p>
       <div class="grade-fotos" id="grade-fotos">
         ${fotos.map((f) => fotoHTML(f)).join('') || '<p class="vazio">Nenhuma foto.</p>'}
       </div>
@@ -410,13 +416,8 @@ async function viewVeiculo(id) {
       ${campo('Nome do monitor', 'v_monitorNome', v.monitorNome)}
     </section>
 
-    <section class="cartao">
-      <div class="cartao-topo">
-        <h3>Checklist</h3>
-        <button class="btn pequeno" id="tudo-conforme">✓ Tudo conforme</button>
-      </div>
-      <p class="ajuda">Marque <b>IRREG.</b> apenas no que estiver em desacordo — o texto do relatório é montado automaticamente.</p>
-      ${GRUPOS.map((g) => grupoHTML(g, v)).join('')}
+    <section class="cartao" id="secao-checklist">
+      ${checklistHTML(v)}
     </section>
 
     <section class="cartao">
@@ -442,6 +443,134 @@ async function viewVeiculo(id) {
 
   ligarFichaVeiculo(v);
   atualizarResumoIrr(v);
+}
+
+// ------------------------------------------------- checklist: modo rápido
+
+function modoChecklist() {
+  return localStorage.getItem('fte:modoChecklist') || 'rapido';
+}
+
+/**
+ * Em campo o agente não percorre 34 itens: ele olha o veículo e aponta o que
+ * está errado. O modo rápido reflete isso — um toque marca a irregularidade, e
+ * só o que foi marcado pede detalhe. O modo completo continua disponível para
+ * quando se quiser atestar item a item.
+ */
+function checklistHTML(v) {
+  const rapido = modoChecklist() === 'rapido';
+  const cabecalho = `
+    <div class="cartao-topo">
+      <h3>Checklist</h3>
+      <div class="alternador">
+        <button class="op ${rapido ? 'sel' : ''}" data-modo="rapido">Rápido</button>
+        <button class="op ${rapido ? '' : 'sel'}" data-modo="completo">Completo</button>
+      </div>
+    </div>`;
+
+  if (!rapido) {
+    return `${cabecalho}
+      <p class="ajuda">Marque <b>IRREG.</b> apenas no que estiver em desacordo — o texto do relatório é montado automaticamente.</p>
+      <button class="btn pequeno" id="tudo-conforme">✓ Marcar pendentes como conformes</button>
+      ${GRUPOS.map((g) => grupoHTML(g, v)).join('')}`;
+  }
+
+  const frequentes = ITENS.filter((i) => i.frequente);
+  const demais = ITENS.filter((i) => !i.frequente);
+  return `${cabecalho}
+    <p class="ajuda">Toque apenas no que estiver <b>irregular</b>. O que não for tocado não vai ao relatório.</p>
+    <input class="busca" id="filtro-itens" type="search" placeholder="Buscar item (faixa, cinto, tacógrafo…)">
+    <div class="chips" id="chips-frequentes">${chipsHTML(frequentes, v)}</div>
+    <details class="grupo mais-itens" id="mais-itens">
+      <summary><span>➕ Demais itens (${demais.length})</span></summary>
+      <div class="chips">${chipsHTML(demais, v)}</div>
+    </details>
+    <div id="marcados">${marcadosHTML(v)}</div>
+    <button class="btn pequeno" id="tudo-conforme">✓ Atestar os demais itens como conformes</button>`;
+}
+
+function chipsHTML(itens, v) {
+  return itens
+    .map((i) => {
+      const marcado = v.itens?.[i.id]?.status === 'irregular';
+      const busca = `${i.curto} ${i.titulo} ${i.frase}`.toLowerCase();
+      return `<button type="button" class="chip ${marcado ? 'sel' : ''}" data-chip="${i.id}"
+        data-busca="${esc(busca)}" title="${esc(i.titulo)}">${esc(i.curto)}</button>`;
+    })
+    .join('');
+}
+
+function marcadosHTML(v) {
+  const marcados = store.irregularidades(v);
+  if (!marcados.length) return '<p class="ajuda">Nenhuma irregularidade marcada.</p>';
+  return `
+    <div class="lista-marcados">
+      ${marcados
+        .map(
+          ({ item, obs }) => `
+        <div class="marcado" data-marcado="${item.id}">
+          <div class="marcado-topo">
+            <b>${esc(item.titulo)}</b>
+            <button class="btn icone perigo" data-desmarcar="${item.id}" aria-label="Desmarcar">✕</button>
+          </div>
+          <small>${esc(item.base || '')}</small>
+          <input class="obs-item" type="text" value="${esc(obs)}"
+            placeholder="Detalhe (opcional): ex. lâmpada traseira esquerda queimada">
+        </div>`
+        )
+        .join('')}
+    </div>`;
+}
+
+function ligarChecklistRapido(v, salvar) {
+  const redesenharMarcados = () => {
+    document.getElementById('marcados').innerHTML = marcadosHTML(v);
+    ligarMarcados(v, salvar, redesenharMarcados);
+    atualizarResumoIrr(v);
+  };
+
+  app.querySelectorAll('[data-chip]').forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.chip;
+      const marcado = v.itens?.[id]?.status === 'irregular';
+      marcarItem(v, id, marcado ? '' : 'irregular');
+      btn.classList.toggle('sel', !marcado);
+      salvar();
+      redesenharMarcados();
+    };
+  });
+
+  const filtro = document.getElementById('filtro-itens');
+  filtro.oninput = () => {
+    const termo = filtro.value.toLowerCase().trim();
+    app.querySelectorAll('[data-chip]').forEach((c) => {
+      c.style.display = !termo || c.dataset.busca.includes(termo) ? '' : 'none';
+    });
+    if (termo) document.getElementById('mais-itens').open = true;
+  };
+
+  ligarMarcados(v, salvar, redesenharMarcados);
+}
+
+function ligarMarcados(v, salvar, redesenhar) {
+  app.querySelectorAll('[data-desmarcar]').forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.desmarcar;
+      marcarItem(v, id, '');
+      const chip = app.querySelector(`[data-chip="${id}"]`);
+      if (chip) chip.classList.remove('sel');
+      salvar();
+      redesenhar();
+    };
+  });
+  app.querySelectorAll('.marcado .obs-item').forEach((campo) => {
+    const id = campo.closest('.marcado').dataset.marcado;
+    campo.addEventListener('input', () => {
+      marcarItem(v, id, 'irregular', campo.value);
+      salvar();
+      atualizarResumoIrr(v);
+    });
+  });
 }
 
 function grupoHTML(grupo, v) {
@@ -486,6 +615,11 @@ function fotoHTML(f) {
   return `
     <figure class="foto" data-foto="${f.id}">
       <img src="${objURL(f.blob)}" alt="Foto do veículo" loading="lazy">
+      <select class="tipo-foto" aria-label="Tipo da foto">
+        ${TIPOS_FOTO.map(
+          (t) => `<option value="${t}" ${(f.tipo || 'outra') === t ? 'selected' : ''}>${t.charAt(0).toUpperCase()}${t.slice(1)}</option>`
+        ).join('')}
+      </select>
       <input class="legenda" type="text" placeholder="Legenda" value="${esc(f.legenda || '')}">
       <button class="btn icone perigo apagar" aria-label="Excluir foto">🗑</button>
     </figure>`;
@@ -567,7 +701,18 @@ function ligarFichaVeiculo(v) {
   });
   validarPlaca();
 
-  // checklist
+  // checklist — alternador de modo
+  app.querySelectorAll('[data-modo]').forEach((b) => {
+    b.onclick = async () => {
+      localStorage.setItem('fte:modoChecklist', b.dataset.modo);
+      await salvarAgora();
+      await viewVeiculo(v.id);
+    };
+  });
+
+  if (modoChecklist() === 'rapido') ligarChecklistRapido(v, salvar);
+
+  // checklist — modo completo
   app.querySelectorAll('.item-check').forEach((div) => {
     const itemId = div.dataset.item;
     div.querySelectorAll('.op').forEach((btn) => {
@@ -598,18 +743,19 @@ function ligarFichaVeiculo(v) {
     toast('Itens pendentes marcados como conformes.');
   };
 
-  // fotos
-  const receber = async (input) => {
+  // fotos — o botão usado define o tipo, que orienta a leitura posterior por IA
+  const receber = async (input, tipo) => {
     const arquivos = [...input.files];
     input.value = '';
     if (!arquivos.length) return;
     toast(`Processando ${arquivos.length} foto(s)…`);
-    await fotosApi.salvarFotos(arquivos, { veiculoId: v.id, fiscalizacaoId: v.fiscalizacaoId });
+    await fotosApi.salvarFotos(arquivos, { veiculoId: v.id, fiscalizacaoId: v.fiscalizacaoId, tipo });
     await recarregarFotos(v);
     toast('Foto(s) salva(s).');
   };
-  document.getElementById('cam').onchange = (e) => receber(e.target);
-  document.getElementById('gal').onchange = (e) => receber(e.target);
+  document.getElementById('cam-doc').onchange = (e) => receber(e.target, 'documento');
+  document.getElementById('cam').onchange = (e) => receber(e.target, 'placa');
+  document.getElementById('gal').onchange = (e) => receber(e.target, 'outra');
   ligarFotos(v);
 
   document.getElementById('geo').onclick = () => {
@@ -655,17 +801,18 @@ function ligarFotos(v) {
       await fotosApi.excluirFoto(id);
       await recarregarFotos(v);
     };
+    const alterarFoto = async (mudanca) => {
+      const fotos = await fotosApi.fotosDoVeiculo(v.id);
+      const f = fotos.find((x) => x.id === id);
+      if (!f) return;
+      Object.assign(f, mudanca);
+      await fotosApi.atualizarFoto(f);
+    };
     fig.querySelector('.legenda').addEventListener(
       'input',
-      debounce(async (e) => {
-        const fotos = await fotosApi.fotosDoVeiculo(v.id);
-        const f = fotos.find((x) => x.id === id);
-        if (f) {
-          f.legenda = e.target.value;
-          await fotosApi.atualizarFoto(f);
-        }
-      }, 400)
+      debounce((e) => alterarFoto({ legenda: e.target.value }), 400)
     );
+    fig.querySelector('.tipo-foto').onchange = (e) => alterarFoto({ tipo: e.target.value });
     fig.querySelector('img').onclick = () => abrirVisualizador(fig.querySelector('img').src);
   });
 }
@@ -706,6 +853,7 @@ function atualizarResumoIrr(v) {
 }
 
 function atualizarSelosGrupos(v) {
+  if (modoChecklist() === 'rapido') return;
   app.querySelectorAll('.grupo').forEach((det, idx) => {
     const grupo = GRUPOS[idx];
     if (!grupo) return;
@@ -752,6 +900,7 @@ async function viewRelatorio() {
         <button class="btn grande" id="imprimir">🖨 Imprimir / salvar PDF</button>
         <button class="btn" id="doc">📝 Baixar .doc (Word)</button>
         <button class="btn" id="csv">📊 Baixar planilha (CSV)</button>
+        <button class="btn" id="pacote">🤖 Pacote para IA (.zip)</button>
       </div>
     </section>
     <section class="cartao previa">
@@ -791,6 +940,13 @@ async function viewRelatorio() {
       nome,
       'application/msword'
     );
+  };
+
+  document.getElementById('pacote').onclick = async () => {
+    toast('Montando o pacote — pode levar alguns segundos…');
+    const r = await gerarPacoteIA(fisc, veiculos, { comFotos: comFotos() });
+    await backup.compartilharOuBaixar(r.blob, r.nome, 'application/zip');
+    toast(`Pacote com ${r.fotos} foto(s) e os dados estruturados.`);
   };
 
   document.getElementById('csv').onclick = async () => {

@@ -13,17 +13,26 @@ relatório com todas as irregularidades apontadas — no mesmo padrão do
 - **Ficha por veículo**: placa (com validação e alerta de placa repetida), tipo,
   marca/modelo, lotação, escolares a bordo, permissionário, rota/escola,
   dados do condutor e do monitor.
-- **Registro fotográfico**: fotos pela câmera ou pela galeria, com legenda,
-  comprimidas automaticamente no aparelho. Cada veículo fiscalizado fica
-  identificado pela placa e pelas suas fotos.
-- **Checklist com 35 itens**, agrupados em documentação do condutor, documentação
-  do veículo, equipamentos e identificação, conservação e operação. Cada item é
-  marcado como **Conforme / Irregular / N/A** e traz a base normativa.
+- **Registro fotográfico classificado**: o botão usado já define o tipo da foto
+  (**documento** ou **veículo**), corrigível em cada imagem. As fotos são
+  comprimidas no aparelho e ganham legenda opcional.
+- **Checklist em dois modos**:
+  - **Rápido** (padrão) — um toque marca a irregularidade. Os 15 itens de maior
+    incidência ficam à vista; os demais entram por busca ou pelo expansor. Só o
+    que foi tocado pede detalhe e vai ao relatório.
+  - **Completo** — os 34 itens agrupados, cada um marcado como
+    *Conforme / Irregular / N/A*, para quando se quiser atestar item a item.
+
+  Todos os itens trazem a base normativa e a frase que entra no relatório.
 - **Relatório final** com síntese estatística, ranking das irregularidades mais
   frequentes, a relação de todos os veículos abordados (com o texto das
   observações montado automaticamente), conclusão/providências e anexo
   fotográfico. Exportação em **PDF (impressão)**, **.doc (Word, editável)** e
   **CSV (planilha)**.
+- **Pacote para IA (.zip)**: as fotos nomeadas por veículo, placa e tipo, mais
+  `dados.json` (dados estruturados, com a base legal de cada irregularidade),
+  `resumo.md` e um arquivo de instruções. É o formato para entregar a um
+  assistente que vá extrair os dados dos documentos fotografados.
 - **Sincronização da equipe (opcional)**: todos os agentes trabalham na mesma
   operação; cada aparelho grava offline e envia sozinho quando há sinal, e o
   coordenador acompanha ao vivo quantos veículos cada agente já fiscalizou.
