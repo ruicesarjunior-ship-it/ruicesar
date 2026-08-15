@@ -12,3 +12,6 @@ processados/*
 modelos/*.docx
 *.tmp/
 unpacked_*/
+
+# Gerado pelo scripts/configurar.mjs — nunca versionar
+fiscalizacao-transporte-escolar/senha-do-banco.txt

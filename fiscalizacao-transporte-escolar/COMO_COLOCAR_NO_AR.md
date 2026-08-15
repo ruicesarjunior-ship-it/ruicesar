@@ -1,5 +1,9 @@
 # Como colocar o aplicativo no ar — passo a passo
 
+> **Prefere não clicar em telas?** Há um script que faz quase tudo sozinho:
+> veja [`CONFIGURACAO_AUTOMATICA.md`](CONFIGURACAO_AUTOMATICA.md). Este documento
+> é o caminho manual, útil se algo falhar.
+
 Duas etapas exigem o seu login e por isso não podem ser feitas por mim:
 **publicar o endereço** (GitHub) e **criar o banco** (Supabase). Cada uma leva
 poucos minutos e é feita **uma única vez**. Todo o resto já está pronto.
