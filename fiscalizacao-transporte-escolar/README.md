@@ -63,12 +63,11 @@ para incluir exigências específicas da Prefeitura. Cada item tem:
 
 O aplicativo é estático (HTML/CSS/JS puros, sem servidor e sem banco externo).
 
-**Opção 1 — GitHub Pages (recomendada, sem custo).** No repositório, vá em
-*Settings → Pages → Build and deployment → Source: **Deploy from a branch***,
-escolha a branch em que este código está e a pasta `/ (root)`. Em poucos minutos o
-aplicativo fica disponível em
-`https://<usuário>.github.io/<repositório>/fiscalizacao-transporte-escolar/` —
-basta enviar esse endereço à equipe por WhatsApp.
+**Opção 1 — GitHub Pages (recomendada, sem custo).** Passo a passo com os cliques
+exatos em [`COMO_COLOCAR_NO_AR.md`](COMO_COLOCAR_NO_AR.md). Em resumo:
+*Settings → Pages → Source: **Deploy from a branch***, escolha a branch deste
+código e a pasta `/ (root)`. Em poucos minutos o aplicativo fica disponível em
+`https://<usuário>.github.io/<repositório>/fiscalizacao-transporte-escolar/`.
 
 **Opção 2 — qualquer hospedagem estática** (Netlify, Vercel, servidor da
 Promotoria): basta publicar o conteúdo desta pasta.
@@ -93,6 +92,9 @@ python3 -m http.server 8000
 
 ## Sincronização entre os inspetores
 
+> **Passo a passo pronto**: veja [`COMO_COLOCAR_NO_AR.md`](COMO_COLOCAR_NO_AR.md),
+> com as duas etapas que exigem login (publicar o endereço e criar o banco).
+
 Sem nenhuma configuração, o aplicativo funciona só no aparelho e a consolidação é
 feita por arquivo. Para que a equipe trabalhe integrada, configure uma vez o
 servidor de sincronização:
@@ -101,15 +103,19 @@ servidor de sincronização:
 2. Em *SQL Editor → New query*, cole o conteúdo de **`supabase/schema.sql`** e
    execute. Isso cria as tabelas e as funções de acesso.
 3. Em *Project Settings → API*, copie a **Project URL** e a chave **anon public**.
-4. No aplicativo, aba **Equipe**, cole os dois valores. Faça isso em cada aparelho
-   da equipe (ou publique o app já com os campos preenchidos por cada um).
+4. Preencha esses dois valores em **`js/config.js`** e publique. Assim todo celular
+   que abrir o endereço já vem configurado e a equipe não digita nada.
+   (Alternativa: colar os valores na aba *Equipe* de cada aparelho.)
 
 Depois disso:
 
 - O **coordenador** abre *Equipe*, define um **código** (ex.: `PRADO2026`) e uma
   **senha** da operação e toca em **Criar operação**.
-- Cada **agente** informa o mesmo código e senha e toca em **Entrar na operação** —
-  não precisa criar fiscalização: os dados vêm da nuvem.
+- Em seguida usa **🔗 Enviar convite à equipe**: o aplicativo monta a mensagem com
+  um link que já leva o servidor e o código da operação. A senha vai em mensagem
+  separada — ela nunca entra no link.
+- Cada **agente** abre o link, toca em **Entrar na operação** e digita apenas a
+  senha — não precisa criar fiscalização: os dados vêm da nuvem.
 - A partir daí a sincronização é automática: ao concluir cada veículo, a cada
   minuto, ao reabrir o aplicativo e assim que o sinal volta. O ícone na barra
   superior mostra `☁️` (em dia), `⬆️ n` (n registros na fila), `📴` (sem sinal)
@@ -173,6 +179,7 @@ js/fotos.js              captura e compressão das imagens
 js/relatorio.js          montagem do relatório, CSS de impressão e CSV
 js/backup.js             exportação/importação por arquivo
 js/nuvem.js              sincronização da equipe (opcional)
+js/config.js             endereço e chave do servidor (preencher uma vez)
 supabase/schema.sql      banco e funções de acesso da sincronização
 sw.js                    funcionamento offline
 ```

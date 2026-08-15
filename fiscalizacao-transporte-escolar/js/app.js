@@ -892,12 +892,14 @@ async function exportarBackup(comFotos) {
 
 // -------------------------------------------------- sincronização da equipe
 
+let forcarFormServidor = false;
+
 async function renderNuvem() {
   const area = document.getElementById('area-nuvem');
   if (!area) return;
   const cfg = nuvem.configNuvem();
 
-  if (!cfg) {
+  if (!cfg || forcarFormServidor) {
     area.innerHTML = `
       <section class="cartao destaque">
         <h2>Sincronização da equipe</h2>
@@ -918,10 +920,17 @@ async function renderNuvem() {
             </ol>
           </div>
         </details>
-        ${campo('Endereço do projeto (Project URL)', 'n_url', '', { placeholder: 'https://xxxx.supabase.co' })}
-        ${campo('Chave pública (anon public)', 'n_chave', '', { placeholder: 'eyJhbGciOi...' })}
-        <button class="btn primario" id="n_salvar">Salvar configuração</button>
+        ${campo('Endereço do projeto (Project URL)', 'n_url', cfg?.url || '', { placeholder: 'https://xxxx.supabase.co' })}
+        ${campo('Chave pública (anon public)', 'n_chave', cfg?.chave || '', { placeholder: 'eyJhbGciOi...' })}
+        <div class="acoes">
+          <button class="btn primario" id="n_salvar">Salvar configuração</button>
+          ${cfg ? '<button class="btn" id="n_cancelar">Cancelar</button>' : ''}
+        </div>
       </section>`;
+    document.getElementById('n_cancelar')?.addEventListener('click', () => {
+      forcarFormServidor = false;
+      renderNuvem();
+    });
     document.getElementById('n_salvar').onclick = () => {
       const url = document.getElementById('n_url').value.trim();
       const chave = document.getElementById('n_chave').value.trim();
@@ -929,6 +938,7 @@ async function renderNuvem() {
         return toast('Verifique o endereço e a chave.', 'aviso');
       }
       nuvem.definirConfigNuvem(url, chave);
+      forcarFormServidor = false;
       toast('Servidor configurado.');
       renderNuvem();
       atualizarStatusNuvem();
@@ -947,7 +957,7 @@ async function renderNuvem() {
           Cada agente entra com esses mesmos dados no seu aparelho.
         </p>
         <div class="grade-2">
-          ${campo('Código da operação', 'n_codigo', fisc ? sugerirCodigo() : '', { placeholder: 'PRADO2026' })}
+          ${campo('Código da operação', 'n_codigo', sugerirCodigo(), { placeholder: 'PRADO2026' })}
           ${campo('Senha da operação', 'n_senha', '', { placeholder: 'mínimo 4 caracteres' })}
         </div>
         <div class="acoes">
@@ -1015,6 +1025,9 @@ async function renderNuvem() {
       <div class="acoes">
         <button class="btn primario grande" id="n_sync">🔄 Sincronizar agora</button>
         <button class="btn" id="n_painel">📊 Atualizar painel</button>
+      </div>
+      <div class="acoes">
+        <button class="btn" id="n_link">🔗 Enviar convite à equipe</button>
         <button class="btn perigo" id="n_sair">Desvincular aparelho</button>
       </div>
       <div id="n_resultado"></div>
@@ -1037,23 +1050,56 @@ async function renderNuvem() {
     atualizarStatusNuvem();
   };
   document.getElementById('n_painel').onclick = carregarPainel;
+  document.getElementById('n_link').onclick = convidarEquipe;
   carregarPainel();
 }
 
+/**
+ * Gera o convite da equipe: um link que já leva o servidor e o código da
+ * operação. A senha vai à parte, para não trafegar no mesmo endereço.
+ */
+async function convidarEquipe() {
+  const link = nuvem.linkConfiguracao(fisc.sala.codigo);
+  if (!link) return toast('Configure o servidor antes.', 'aviso');
+  const texto =
+    `Fiscalização do transporte escolar — operação ${fisc.sala.codigo}\n\n` +
+    `1) Abra este link no celular:\n${link}\n\n` +
+    `2) Toque em "Adicionar à tela inicial" para instalar o aplicativo.\n` +
+    `3) Na aba "Equipe", toque em "Entrar na operação" e digite a senha que enviarei em separado.\n` +
+    `4) Em "Início", escreva seu nome e posto.`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: `Operação ${fisc.sala.codigo}`, text: texto });
+      return;
+    }
+    await navigator.clipboard.writeText(texto);
+    toast('Convite copiado — cole no grupo da equipe.');
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    const alvo = document.getElementById('n_resultado');
+    if (alvo) alvo.innerHTML = `<div class="ok-box"><b>Convite:</b><br><textarea rows="8" class="obs-item">${esc(texto)}</textarea></div>`;
+  }
+}
+
 function botaoTrocarServidorHTML() {
-  return '<button class="btn pequeno" id="n_trocar">Trocar servidor de sincronização</button>';
+  const cfg = nuvem.configNuvem();
+  return `
+    <p class="ajuda">
+      Servidor: <b>${esc((cfg?.url || '').replace(/^https?:\/\//, ''))}</b>${cfg?.publicada ? ' (já configurado no endereço publicado)' : ''}.
+    </p>
+    <button class="btn pequeno" id="n_trocar">Usar outro servidor neste aparelho</button>`;
 }
 
 function ligarTrocaServidor() {
   document.getElementById('n_trocar')?.addEventListener('click', () => {
-    if (!confirm('Remover a configuração do servidor deste aparelho?')) return;
-    nuvem.definirConfigNuvem(null, null);
+    forcarFormServidor = true;
     renderNuvem();
-    atualizarStatusNuvem();
   });
 }
 
 function sugerirCodigo() {
+  const doLink = nuvem.codigoPadrao();
+  if (doLink) return doLink;
   const m = (fisc?.municipio || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8);
   return `${m || 'OPERACAO'}${fisc?.ano || ''}`;
 }
@@ -1222,6 +1268,11 @@ function debounce(fn, ms) {
 }
 
 async function iniciar() {
+  // Convite recebido por link: já deixa o servidor e o código configurados.
+  if (nuvem.aplicarConfigDaURL()) {
+    setTimeout(() => toast('Servidor de sincronização configurado pelo convite.'), 600);
+  }
+
   // O mesmo CSS usado no arquivo exportado vale para a prévia e para a impressão.
   const estilo = document.createElement('style');
   estilo.textContent = CSS_RELATORIO;

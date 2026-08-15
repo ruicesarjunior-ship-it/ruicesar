@@ -18,18 +18,61 @@ import {
 } from './store.js';
 import { fotosDaFiscalizacao, blobParaDataURL, dataURLParaBlob } from './fotos.js';
 import { uid } from './db.js';
+import { CONFIG } from './config.js';
 
 const CHAVE_CFG = 'fte:nuvem';
 const LIMITE_FOTOS_POR_SYNC = 8; // evita travar a sincronização numa conexão ruim
 
 // ------------------------------------------------------------ configuração
 
+/**
+ * Configuração vigente: o que foi digitado neste aparelho tem prioridade;
+ * na falta dele, vale o que estiver publicado em config.js — assim a equipe
+ * abre o endereço e já está pronta para sincronizar, sem digitar nada.
+ */
 export function configNuvem() {
   try {
-    return JSON.parse(localStorage.getItem(CHAVE_CFG) || 'null');
+    const local = JSON.parse(localStorage.getItem(CHAVE_CFG) || 'null');
+    if (local?.url && local?.chave) return local;
   } catch {
-    return null;
+    /* configuração local corrompida: cai para a publicada */
   }
+  if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
+    return { url: CONFIG.SUPABASE_URL.replace(/\/+$/, ''), chave: CONFIG.SUPABASE_ANON_KEY, publicada: true };
+  }
+  return null;
+}
+
+/** Código sugerido para a operação (config publicada ou link recebido). */
+export function codigoPadrao() {
+  return localStorage.getItem('fte:opPadrao') || CONFIG.CODIGO_OPERACAO_PADRAO || '';
+}
+
+/**
+ * Configuração por link: o coordenador envia um endereço já com o servidor e o
+ * código da operação, e o agente só digita a senha. A senha nunca vai no link.
+ */
+export function aplicarConfigDaURL() {
+  const p = new URLSearchParams(location.search);
+  const srv = p.get('srv');
+  const chave = p.get('key');
+  const op = p.get('op');
+  if (!srv && !chave && !op) return false;
+  if (srv && chave) definirConfigNuvem(srv, chave);
+  if (op) localStorage.setItem('fte:opPadrao', op.trim().toUpperCase());
+  // Limpa a barra de endereços para não deixar a configuração exposta no histórico.
+  history.replaceState(null, '', location.pathname + location.hash);
+  return true;
+}
+
+/** Link de configuração para distribuir à equipe (sem a senha). */
+export function linkConfiguracao(codigoOperacao) {
+  const cfg = configNuvem();
+  if (!cfg) return null;
+  const base = `${location.origin}${location.pathname}`;
+  const p = new URLSearchParams({ srv: cfg.url, key: cfg.chave });
+  if (codigoOperacao) p.set('op', codigoOperacao);
+  return `${base}?${p.toString()}`;
 }
 
 export function definirConfigNuvem(url, chave) {
