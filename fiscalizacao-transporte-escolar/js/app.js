@@ -16,7 +16,7 @@ import * as fotosApi from './fotos.js';
 import { TIPOS_FOTO } from './fotos.js';
 import { gerarPacoteIA } from './pacote.js';
 import { uso } from './db.js';
-import { montarRelatorio, documentoCompleto, gerarCSV, esc, dataCurta, CSS_RELATORIO } from './relatorio.js';
+import { montarRelatorio, montarRelatorioConsolidado, documentoCompleto, gerarCSV, esc, dataCurta, CSS_RELATORIO } from './relatorio.js';
 import * as backup from './backup.js';
 import * as nuvem from './nuvem.js';
 
@@ -910,6 +910,7 @@ function atualizarSelosGrupos(v) {
 async function viewRelatorio() {
   if (!fisc) return semFiscalizacao();
   const veiculos = await store.listarVeiculos(fisc.id);
+  const outras = (await store.listarFiscalizacoes()).filter((f) => f.id !== fisc.id);
   const pendencias = [];
   const semPlaca = veiculos.filter((v) => !store.placaValida(v.placa));
   if (semPlaca.length) pendencias.push(`${semPlaca.length} veículo(s) com placa ausente ou inválida.`);
@@ -921,13 +922,27 @@ async function viewRelatorio() {
   app.innerHTML = `
     <section class="cartao">
       <h2>Relatório final</h2>
-      <p class="sub">Nº ${esc(fisc.numero)}/${esc(fisc.ano)} — ${veiculos.length} veículo(s).</p>
+      <p class="sub">
+        Nº ${esc(fisc.numero)}/${esc(fisc.ano)} — ${veiculos.length} veículo(s).
+        ${outras.length ? `Há ${outras.length} outra(s) fiscalização(ões) neste aparelho.` : ''}
+      </p>
       ${
         pendencias.length
           ? `<div class="alerta-box"><b>Antes de emitir, confira:</b><ul>${pendencias
               .map((p) => `<li>${esc(p)}</li>`)
               .join('')}</ul></div>`
           : '<div class="ok-box">Dados completos para emissão.</div>'
+      }
+      ${
+        outras.length
+          ? `<label class="campo">
+               <span>Escopo do relatório</span>
+               <select id="escopo">
+                 <option value="atual">Somente esta fiscalização (nº ${esc(fisc.numero)}/${esc(fisc.ano)})</option>
+                 <option value="todas">Consolidado — todas as ${outras.length + 1} fiscalizações do aparelho</option>
+               </select>
+             </label>`
+          : ''
       }
       <label class="campo linha-check">
         <input type="checkbox" id="com-fotos" checked>
@@ -950,15 +965,35 @@ async function viewRelatorio() {
     </section>`;
 
   const comFotos = () => document.getElementById('com-fotos').checked;
+  const consolidado = () => document.getElementById('escopo')?.value === 'todas';
+
+  /** Todas as fiscalizações do aparelho, em ordem cronológica. */
+  const carregarBlocos = async () => {
+    const todas = [...outras, fisc].sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+    const blocos = [];
+    for (const f of todas) blocos.push({ fisc: f, veiculos: await store.listarVeiculos(f.id) });
+    return blocos;
+  };
+
+  const montar = async () => {
+    if (!consolidado()) return montarRelatorio(fisc, veiculos, { comFotos: comFotos() });
+    const blocos = await carregarBlocos();
+    return montarRelatorioConsolidado(blocos, {
+      comFotos: comFotos(),
+      cabecalhoDe: fisc,
+      conclusao: fisc.conclusao || '',
+    });
+  };
 
   const gerar = async () => {
-    toast('Montando relatório…');
-    const html = await montarRelatorio(fisc, veiculos, { comFotos: comFotos() });
+    toast(consolidado() ? 'Montando o consolidado…' : 'Montando relatório…');
+    const html = await montar();
     document.getElementById('previa').innerHTML = html;
     return html;
   };
 
   document.getElementById('gerar').onclick = gerar;
+  document.getElementById('escopo')?.addEventListener('change', gerar);
 
   document.getElementById('imprimir').onclick = async () => {
     const html = await gerar();
@@ -974,10 +1009,17 @@ async function viewRelatorio() {
   };
 
   document.getElementById('doc').onclick = async () => {
-    const html = await montarRelatorio(fisc, veiculos, { comFotos: comFotos() });
-    const nome = `Relatorio_Fiscalizacao_${fisc.numero}-${fisc.ano}_${(fisc.municipio || 'municipio').replace(/\s+/g, '_')}.doc`;
+    const html = await montar();
+    const nome = consolidado()
+      ? `Relatorio_Consolidado_Transporte_Escolar.doc`
+      : `Relatorio_Fiscalizacao_${fisc.numero}-${fisc.ano}_${(fisc.municipio || 'municipio').replace(/\s+/g, '_')}.doc`;
     await backup.compartilharOuBaixar(
-      documentoCompleto(html, `Relatório de Fiscalização nº ${fisc.numero}/${fisc.ano}`),
+      documentoCompleto(
+        html,
+        consolidado()
+          ? 'Relatório consolidado de fiscalização do transporte escolar'
+          : `Relatório de Fiscalização nº ${fisc.numero}/${fisc.ano}`
+      ),
       nome,
       'application/msword'
     );
@@ -1027,10 +1069,25 @@ async function viewRelatorio() {
   };
 
   document.getElementById('csv').onclick = async () => {
-    const csv = gerarCSV(fisc, veiculos, ITENS);
+    if (!consolidado()) {
+      await backup.compartilharOuBaixar(
+        gerarCSV(fisc, veiculos, ITENS),
+        `Fiscalizacao_${fisc.numero}-${fisc.ano}.csv`,
+        'text/csv;charset=utf-8'
+      );
+      return;
+    }
+    const blocos = await carregarBlocos();
+    const partes = blocos.map((b, i) => {
+      const csv = gerarCSV(b.fisc, b.veiculos, ITENS);
+      const linhas = csv.split('\r\n');
+      const titulo = `Nº ${b.fisc.numero}/${b.fisc.ano} — ${b.fisc.municipio || ''} — ${dataCurta(b.fisc.data)}`;
+      // O cabeçalho de colunas entra uma única vez.
+      return i === 0 ? `${titulo}\r\n${csv}` : `\r\n${titulo}\r\n${linhas.slice(1).join('\r\n')}`;
+    });
     await backup.compartilharOuBaixar(
-      csv,
-      `Fiscalizacao_${fisc.numero}-${fisc.ano}.csv`,
+      partes.join('\r\n'),
+      'Fiscalizacoes_consolidado.csv',
       'text/csv;charset=utf-8'
     );
   };

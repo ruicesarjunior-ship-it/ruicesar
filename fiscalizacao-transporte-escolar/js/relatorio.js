@@ -232,6 +232,203 @@ function pct(parte, total) {
   return `${((parte * 100) / total).toFixed(0)}%`;
 }
 
+/**
+ * Relatório consolidado de várias fiscalizações.
+ *
+ * Reúne todas as operações registradas no aparelho num documento único, com a
+ * síntese geral, o ranking agregado, cada fiscalização na íntegra e — o dado que
+ * só aparece no consolidado — a relação de veículos reincidentes, isto é, as
+ * placas autuadas em mais de uma operação.
+ *
+ * @param blocos [{fisc, veiculos}] em ordem cronológica
+ */
+export async function montarRelatorioConsolidado(blocos, opts = {}) {
+  const { comFotos = false, cabecalhoDe = null, conclusao = '' } = opts;
+  const todos = blocos.flatMap((b) => b.veiculos);
+  const geral = consolidar(todos);
+  const base = cabecalhoDe || blocos[0]?.fisc || {};
+  const datas = blocos.map((b) => b.fisc.data).filter(Boolean).sort();
+  const municipios = [...new Set(blocos.map((b) => b.fisc.municipio).filter(Boolean))];
+
+  const cabecalho = `
+    <header class="cabecalho">
+      <div class="orgao">${esc(base.orgaoMp || '')}</div>
+      <div class="orgao">${esc(base.promotoria || '')}</div>
+      <h1>RELATÓRIO CONSOLIDADO DE FISCALIZAÇÃO DO TRANSPORTE ESCOLAR</h1>
+      <div class="subtitulo">
+        ${blocos.length} fiscalização(ões)${municipios.length ? ` — ${esc(municipios.join(', '))}` : ''}
+      </div>
+    </header>
+    <p class="preambulo">
+      O presente documento consolida as fiscalizações do transporte escolar realizadas
+      ${datas.length ? `entre ${esc(dataCurta(datas[0]))} e ${esc(dataCurta(datas[datas.length - 1]))}` : ''},
+      sob a coordenação da ${esc(base.promotoria || 'Promotoria de Justiça')}, reunindo
+      ${geral.totalVeiculos} veículo(s) abordado(s) e ${geral.totalIrregularidades}
+      irregularidade(s) constatada(s).
+    </p>`;
+
+  const sintese = `
+    <section>
+      <h2>1. SÍNTESE GERAL</h2>
+      <table class="dados">
+        <tbody>
+          <tr><th>Fiscalizações realizadas</th><td>${blocos.length}</td></tr>
+          <tr><th>Municípios</th><td>${esc(municipios.join(', ') || '—')}</td></tr>
+          <tr><th>Veículos abordados</th><td>${geral.totalVeiculos}</td></tr>
+          <tr><th>Veículos com irregularidades</th><td>${geral.irregulares} (${pct(geral.irregulares, geral.totalVeiculos)})</td></tr>
+          <tr><th>Veículos sem irregularidades</th><td>${geral.regulares} (${pct(geral.regulares, geral.totalVeiculos)})</td></tr>
+          <tr><th>Total de irregularidades</th><td>${geral.totalIrregularidades}</td></tr>
+          <tr><th>Média de irregularidades por veículo</th><td>${
+            geral.totalVeiculos ? (geral.totalIrregularidades / geral.totalVeiculos).toFixed(1) : '0'
+          }</td></tr>
+          <tr><th>Veículos autuados</th><td>${geral.autuados}</td></tr>
+          <tr><th>Veículos retidos/removidos</th><td>${geral.retidos}</td></tr>
+        </tbody>
+      </table>
+
+      <h3>1.1. Fiscalizações reunidas</h3>
+      <table class="ranking">
+        <thead><tr><th>Relatório</th><th>Data</th><th>Município</th><th>Veíc.</th><th>Irreg.</th></tr></thead>
+        <tbody>
+          ${blocos
+            .map((b) => {
+              const s = consolidar(b.veiculos);
+              return `<tr>
+                <td>${esc(b.fisc.numero)}/${esc(b.fisc.ano)}</td>
+                <td>${esc(dataCurta(b.fisc.data))}</td>
+                <td>${esc(b.fisc.municipio || '—')}</td>
+                <td class="num">${s.totalVeiculos}</td>
+                <td class="num">${s.totalIrregularidades}</td>
+              </tr>`;
+            })
+            .join('')}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>2. IRREGULARIDADES POR INCIDÊNCIA (todas as fiscalizações)</h2>
+      ${
+        geral.ranking.length
+          ? `<table class="ranking">
+              <thead><tr><th>#</th><th>Irregularidade</th><th>Base normativa</th><th>Nat.</th><th>Veíc.</th><th>%</th></tr></thead>
+              <tbody>
+                ${geral.ranking
+                  .map(
+                    (r, i) => `<tr>
+                      <td>${i + 1}</td>
+                      <td>${esc(r.item.titulo)}</td>
+                      <td class="base">${esc(r.item.base || '')}</td>
+                      <td>${esc(GRAVIDADE_LABEL[r.item.gravidade] || '')}</td>
+                      <td class="num">${r.qtd}</td>
+                      <td class="num">${r.pct.toFixed(0)}%</td>
+                    </tr>`
+                  )
+                  .join('')}
+              </tbody>
+            </table>`
+          : '<p>Não foram constatadas irregularidades.</p>'
+      }
+    </section>`;
+
+  // Reincidência: mesma placa em mais de uma fiscalização.
+  const porPlaca = new Map();
+  for (const b of blocos) {
+    for (const v of b.veiculos) {
+      const p = formatarPlaca(v.placa);
+      if (!p) continue;
+      if (!porPlaca.has(p)) porPlaca.set(p, []);
+      porPlaca.get(p).push({ fisc: b.fisc, veiculo: v });
+    }
+  }
+  const reincidentes = [...porPlaca.entries()]
+    .filter(([, ocorr]) => new Set(ocorr.map((o) => o.fisc.id)).size > 1)
+    .sort((a, b) => b[1].length - a[1].length);
+
+  const reincidencia = `
+    <section>
+      <h2>3. VEÍCULOS REINCIDENTES</h2>
+      ${
+        reincidentes.length
+          ? `<p>
+               Os veículos abaixo foram abordados em mais de uma fiscalização, o que
+               permite aferir a persistência das irregularidades e a efetividade das
+               providências anteriormente adotadas.
+             </p>
+             <table class="ranking">
+               <thead><tr><th>Placa</th><th>Abordagens</th><th>Histórico</th></tr></thead>
+               <tbody>
+                 ${reincidentes
+                   .map(
+                     ([placa, ocorr]) => `<tr>
+                       <td>${esc(placa)}</td>
+                       <td class="num">${ocorr.length}</td>
+                       <td class="base">${ocorr
+                         .map(
+                           (o) =>
+                             `${esc(dataCurta(o.fisc.data))}: ${irregularidades(o.veiculo).length} irregularidade(s)`
+                         )
+                         .join('; ')}</td>
+                     </tr>`
+                   )
+                   .join('')}
+               </tbody>
+             </table>`
+          : '<p>Nenhum veículo foi abordado em mais de uma fiscalização.</p>'
+      }
+    </section>`;
+
+  let corpo = '';
+  let n = 4;
+  for (const bloco of blocos) {
+    const interno = await montarRelatorio(bloco.fisc, bloco.veiculos, { comFotos });
+    // Reaproveita a redação oficial de cada fiscalização, sem o cabeçalho e as
+    // assinaturas, que no consolidado aparecem uma única vez.
+    const semCabecalho = interno
+      .replace(/<header class="cabecalho">[\s\S]*?<\/header>/, '')
+      .replace(/<section class="assinaturas">[\s\S]*?<\/section>/, '')
+      .replace(/<h2>1\. SÍNTESE DO RESULTADO<\/h2>/, '<h3>Síntese</h3>')
+      .replace(/<h2>2\. VEÍCULOS ABORDADOS<\/h2>/, '<h3>Veículos abordados</h3>')
+      .replace(/<h2>3\. CONCLUSÃO E PROVIDÊNCIAS<\/h2>/, '<h3>Conclusão da operação</h3>')
+      .replace(/<h3>1\.1\. Irregularidades por incidência<\/h3>/, '<h4>Irregularidades por incidência</h4>');
+    corpo += `
+      <section>
+        <h2>${n}. FISCALIZAÇÃO Nº ${esc(bloco.fisc.numero)}/${esc(bloco.fisc.ano)} — ${esc(
+      bloco.fisc.municipio || '—'
+    )}</h2>
+        ${semCabecalho}
+      </section>`;
+    n += 1;
+  }
+
+  const fecho = `
+    ${
+      conclusao.trim()
+        ? `<section>
+             <h2>${n}. CONCLUSÃO CONSOLIDADA</h2>
+             ${conclusao
+               .trim()
+               .split(/\n{2,}/)
+               .map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`)
+               .join('')}
+           </section>`
+        : ''
+    }
+    <section class="assinaturas">
+      <p class="fecho">Respeitosamente,</p>
+      <div class="assinatura">
+        <div class="linha-assinatura"></div>
+        <div>${esc(base.promotor || 'Promotor(a) de Justiça')}</div>
+        <div class="cargo">${esc(base.promotoria || '')}</div>
+      </div>
+      <p class="rodape-doc">${esc(municipios[0] || '')}${municipios[0] ? ', ' : ''}${esc(
+    dataPorExtenso(new Date().toISOString().slice(0, 10))
+  )}.</p>
+    </section>`;
+
+  return `${cabecalho}${sintese}${reincidencia}${corpo}${fecho}`;
+}
+
 /** CSS aplicado tanto na visualização quanto na impressão/exportação. */
 export const CSS_RELATORIO = `
   .documento { font-family: "Times New Roman", Georgia, serif; color: #000; background: #fff; line-height: 1.45; font-size: 12pt; }
